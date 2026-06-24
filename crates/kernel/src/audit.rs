@@ -86,13 +86,6 @@ pub fn execution_span() -> Span {
     )
 }
 
-pub fn final_output_span() -> Span {
-    info_span!(
-        target: AUDIT_TARGET,
-        "tool.final_output",
-    )
-}
-
 pub fn action_grant_span(action_kind: &str) -> Span {
     info_span!(
         target: AUDIT_TARGET,
