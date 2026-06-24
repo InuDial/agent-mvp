@@ -1,6 +1,6 @@
 use crate::error::AuthorizationError;
 use crate::service::{fs::FsAccess, network::DenyNetwork};
-use crate::tool::{ToolPlaneContext, ToolRegistration};
+use crate::tool::{ToolPlane, ToolPlaneContext, ToolRegistration};
 use mvp_contract::{Capabilities, Capability, ToolSpec};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -45,10 +45,14 @@ pub fn registration(capabilities: Capabilities) -> ToolRegistration {
 
 #[allow(dead_code)]
 pub fn context<'a>(
-    fs: &'a dyn FsAccess,
+    _fs: &'a dyn FsAccess,
     root: &'a Path,
 ) -> Result<ToolPlaneContext<'a>, AuthorizationError> {
     let registration = Box::leak(Box::new(registration([Capability::FsRead].into())));
-    let workspace_root = std::fs::canonicalize(root).map_err(AuthorizationError::Io)?;
-    ToolPlaneContext::new(fs, &DenyNetwork, registration, workspace_root)
+    let plane = Box::leak(Box::new(ToolPlane::new(
+        crate::service::fs::StdFs::new(),
+        DenyNetwork,
+    )));
+    let params = crate::tool::InvocationParams::new(root);
+    ToolPlaneContext::new(plane, registration, params)
 }

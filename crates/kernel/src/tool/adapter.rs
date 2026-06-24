@@ -28,31 +28,17 @@ pub(crate) trait ToolAdapter: super::sealed::SealedToolAdapter + Send + Sync {
 #[async_trait]
 pub trait ToolImpl: Send + Sync + 'static {
     type Input: Send + 'static;
-    type PreparedInput: Send + 'static;
-    type RawOutput: Send + 'static;
     type Output: Send + Into<ToolOutcome> + 'static;
 
     fn spec(&self) -> ToolSpec;
 
     fn parse_input(&self, payload: Value) -> Result<Self::Input, InputError>;
 
-    async fn prepare_input(
-        &self,
-        ctx: &ToolPlaneContext<'_>,
-        input: Self::Input,
-    ) -> Result<Self::PreparedInput, AuthorizationError>;
-
     async fn execute(
         &self,
         ctx: &ToolPlaneContext<'_>,
-        input: Self::PreparedInput,
-    ) -> Result<Self::RawOutput, ExecutionError>;
-
-    async fn prepare_output(
-        &self,
-        ctx: &ToolPlaneContext<'_>,
-        output: Self::RawOutput,
-    ) -> Result<Self::Output, OutputAuthorizationError>;
+        input: Self::Input,
+    ) -> Result<Self::Output, ToolError>;
 }
 
 /// Runtime adapter around a user-provided `ToolImpl`.
@@ -81,7 +67,7 @@ impl<T: ToolImpl> ToolAdapter for KernelToolAdapter<T> {
         let tool_span = audit::tool_invocation_span(registration);
 
         async {
-            let parse_span = audit::parse_input_span(registration);
+            let parse_span = audit::parse_input_span();
             let input = {
                 let _parse_enter = parse_span.enter();
                 self.inner
@@ -89,30 +75,15 @@ impl<T: ToolImpl> ToolAdapter for KernelToolAdapter<T> {
                     .map_err(ToolError::InvalidInput)?
             };
 
-            let prepared = self
-                .inner
-                .prepare_input(ctx, input)
-                .instrument(audit::input_auth_span(registration))
-                .await
-                .map_err(ToolError::Authorization)?;
-
-            let raw = self
-                .inner
-                .execute(ctx, prepared)
-                .instrument(audit::execution_span(registration))
-                .await
-                .map_err(ToolError::Execution)?;
-
             let output = self
                 .inner
-                .prepare_output(ctx, raw)
-                .instrument(audit::output_auth_span(registration))
-                .await
-                .map_err(ToolError::OutputAuthorization)?;
+                .execute(ctx, input)
+                .instrument(audit::execution_span())
+                .await?;
 
             let outcome = ctx
                 .finalize_output(registration, output.into())
-                .instrument(audit::final_output_span(registration))
+                .instrument(audit::final_output_span())
                 .await
                 .map_err(ToolError::FinalOutput)?;
 

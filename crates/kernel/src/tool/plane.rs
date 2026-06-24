@@ -1,25 +1,28 @@
-use crate::error::{AuthorizationError, ToolError};
+use crate::error::ToolError;
+use crate::policy::{CapabilityEnvelopePolicy, KernelPolicyContext, PolicyPlane};
 use crate::service::{fs::FsAccess, network::NetworkAccess};
 use crate::tool::{
-    InvocationParams, KernelToolAdapter, ToolImpl, ToolPlaneContext, ToolRegistration,
-    ToolRegistry,
+    InvocationParams, KernelToolAdapter, ToolImpl, ToolPlaneContext, ToolRegistration, ToolRegistry,
 };
-use std::fs;
 use mvp_contract::{ToolOutcome, ToolRequest};
 
 /// Tool registry plus kernel-owned service implementations.
 pub struct ToolPlane {
     registry: ToolRegistry,
-    fs: Box<dyn FsAccess>,
-    network: Box<dyn NetworkAccess>,
+    pub(crate) fs: Box<dyn FsAccess>,
+    pub(crate) network: Box<dyn NetworkAccess>,
+    pub policy: PolicyPlane<KernelPolicyContext>,
 }
 
 impl ToolPlane {
     pub fn new(fs: impl FsAccess + 'static, network: impl NetworkAccess + 'static) -> Self {
+        let mut policy = PolicyPlane::new();
+        policy.prepend_global(CapabilityEnvelopePolicy);
         Self {
             registry: ToolRegistry::new(),
             fs: Box::new(fs),
             network: Box::new(network),
+            policy,
         }
     }
 
@@ -43,15 +46,8 @@ impl ToolPlane {
             .registry
             .get(&req.name)
             .ok_or_else(|| ToolError::UnknownTool(req.name.clone()))?;
-        let workspace_root =
-            fs::canonicalize(params.workspace_root).map_err(AuthorizationError::Io).map_err(ToolError::Authorization)?;
-        let ctx = ToolPlaneContext::new(
-            self.fs.as_ref(),
-            self.network.as_ref(),
-            registered.registration(),
-            workspace_root,
-        )
-        .map_err(ToolError::Authorization)?;
+        let ctx = ToolPlaneContext::new(self, registered.registration(), params)
+            .map_err(ToolError::Authorization)?;
 
         registered.invoke(&ctx, req).await
     }

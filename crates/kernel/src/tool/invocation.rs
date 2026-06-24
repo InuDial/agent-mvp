@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 ///
 /// This is intentionally cheap and one-shot: `ToolPlane` builds the internal
 /// `ToolPlaneContext` for each invocation instead of exposing a reusable scope.
+#[derive(Clone, Debug)]
 pub struct InvocationParams {
     pub(crate) workspace_root: PathBuf,
 }

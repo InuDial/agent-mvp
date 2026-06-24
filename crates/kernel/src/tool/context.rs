@@ -1,9 +1,8 @@
-use std::path::PathBuf;
-
-use crate::error::{AuthorizationError, OutputAuthorizationError};
-use crate::service::{fs::FsAccess, network::NetworkAccess};
-use crate::tool::ToolRegistration;
-use mvp_contract::ToolOutcome;
+use crate::error::{AuthorizationError, OutputAuthorizationError, ToolError};
+use crate::policy::KernelPolicyContext;
+use crate::service::{fs::FsContext, network::NetworkContext};
+use crate::tool::{InvocationParams, ToolPlane, ToolRegistration};
+use mvp_contract::{ToolOutcome, ToolRequest};
 
 /// The single runtime context passed to tool implementations.
 ///
@@ -11,24 +10,24 @@ use mvp_contract::ToolOutcome;
 /// service namespaces such as `ctx.fs()` and `ctx.network()`. Each service owns
 /// its grant issuance, grant consumption, policy checks, and audit records.
 pub struct ToolPlaneContext<'a> {
-    pub(crate) fs: &'a dyn FsAccess,
-    pub(crate) network: &'a dyn NetworkAccess,
+    tool_plane: &'a ToolPlane,
     pub(crate) registration: &'a ToolRegistration,
-    pub(crate) workspace_root: PathBuf,
+    pub(crate) params: InvocationParams,
 }
 
 impl<'a> ToolPlaneContext<'a> {
     pub(crate) fn new(
-        fs: &'a dyn FsAccess,
-        network: &'a dyn NetworkAccess,
+        tool_plane: &'a ToolPlane,
         registration: &'a ToolRegistration,
-        workspace_root: PathBuf,
+        mut params: InvocationParams,
     ) -> Result<Self, AuthorizationError> {
+        params.workspace_root =
+            std::fs::canonicalize(&params.workspace_root).map_err(AuthorizationError::Io)?;
+
         Ok(Self {
-            fs,
-            network,
+            tool_plane,
             registration,
-            workspace_root,
+            params,
         })
     }
 
@@ -46,5 +45,37 @@ impl<'a> ToolPlaneContext<'a> {
     /// like filesystem and network operations live under their own namespaces.
     pub async fn redact_text(&self, text: String) -> Result<String, OutputAuthorizationError> {
         Ok(text)
+    }
+
+    pub(crate) fn policy_context(&self) -> KernelPolicyContext {
+        KernelPolicyContext::new(
+            self.registration.spec.capabilities,
+            self.params.workspace_root.clone(),
+        )
+    }
+
+    pub fn params(&self) -> &InvocationParams {
+        &self.params
+    }
+
+    pub async fn invoke_tool(&self, req: ToolRequest) -> Result<ToolOutcome, ToolError> {
+        self.tool_plane.invoke(self.params.clone(), req).await
+    }
+
+    pub fn fs(&'a self) -> FsContext<'a, KernelPolicyContext> {
+        FsContext::new(
+            &*self.tool_plane.fs,
+            &self.tool_plane.policy,
+            self.policy_context(),
+            self.params.workspace_root.as_path(),
+        )
+    }
+
+    pub fn network(&'a self) -> NetworkContext<'a, KernelPolicyContext> {
+        NetworkContext::new(
+            &*self.tool_plane.network,
+            &self.tool_plane.policy,
+            self.policy_context(),
+        )
     }
 }

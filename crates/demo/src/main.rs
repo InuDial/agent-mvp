@@ -1,13 +1,16 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use mvp_builtin::ReadFileTool;
+use mvp_builtin::{double::Double, read_file::ReadFileTool};
 use mvp_contract::ToolRequest;
 use mvp_kernel::{
-    service::{fs::StdFs, network::DenyNetwork},
+    service::{
+        fs::{AllowWorkspaceReadPolicy, StdFs},
+        network::DenyNetwork,
+    },
     tool::{InvocationParams, ToolPlane},
 };
 use serde_json::json;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -32,13 +35,18 @@ async fn main() {
 
     let mut plane = ToolPlane::new(StdFs::new(), DenyNetwork);
     plane.register(ReadFileTool).unwrap();
+    plane.register(Double).unwrap();
+    plane.policy.append(AllowWorkspaceReadPolicy);
 
     let outcome = plane
         .invoke(
             InvocationParams::new(&root),
             ToolRequest {
-                name: "read_file".into(),
-                payload: json!({ "path": "hello.txt" }),
+                name: "double".into(),
+                payload: json!({
+                    "name": "read_file",
+                    "payload":{ "path": "hello.txt" },
+                }),
             },
         )
         .await

@@ -21,12 +21,14 @@ pub enum InputError {
 #[derive(Debug)]
 pub enum AuthorizationError {
     MissingCapability(Capability),
+    Denied(String),
     OutsideWorkspace,
     Io(std::io::Error),
 }
 
 #[derive(Debug)]
 pub enum ExecutionError {
+    Authorization(AuthorizationError),
     Capability(CapabilityError),
     Other(String),
 }
