@@ -1,5 +1,5 @@
 use crate::audit;
-use crate::error::{AuthorizationError, OutputAuthorizationError, ToolError};
+use crate::error::{AuthorizationError, ToolError};
 use crate::policy::KernelPolicyContext;
 use crate::service::{fs::FsContext, network::NetworkContext};
 use crate::tool::{InvocationParams, ToolPlane, ToolRegistration};
@@ -43,22 +43,6 @@ impl<'a> ToolPlaneContext<'a> {
             effective_capabilities,
             canonical_workspace_root,
         })
-    }
-
-    pub(crate) async fn finalize_output(
-        &self,
-        _registration: &ToolRegistration,
-        outcome: ToolOutcome,
-    ) -> Result<ToolOutcome, OutputAuthorizationError> {
-        Ok(outcome)
-    }
-
-    /// Output helper kept on the total context for now.
-    ///
-    /// In a fuller design this can move to `ctx.output()` or `ctx.text()` just
-    /// like filesystem and network operations live under their own namespaces.
-    pub async fn redact_text(&self, text: String) -> Result<String, OutputAuthorizationError> {
-        Ok(text)
     }
 
     pub(crate) fn policy_context(&self) -> KernelPolicyContext {

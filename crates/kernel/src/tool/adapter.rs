@@ -83,13 +83,7 @@ impl<T: ToolImpl> ToolAdapter for KernelToolAdapter<T> {
                 .instrument(audit::execution_span())
                 .await?;
 
-            let outcome = ctx
-                .finalize_output(registration, output.into())
-                .instrument(audit::final_output_span())
-                .await
-                .map_err(ToolError::FinalOutput)?;
-
-            Ok(outcome)
+            Ok(output.into())
         }
         .instrument(tool_span)
         .await
