@@ -8,8 +8,6 @@ pub enum ToolError {
     InvalidInput(InputError),
     Authorization(AuthorizationError),
     Execution(ExecutionError),
-    OutputAuthorization(OutputAuthorizationError),
-    FinalOutput(OutputAuthorizationError),
 }
 
 #[derive(Debug)]
@@ -31,11 +29,6 @@ pub enum ExecutionError {
     Authorization(AuthorizationError),
     Capability(CapabilityError),
     Other(String),
-}
-
-#[derive(Debug)]
-pub enum OutputAuthorizationError {
-    Denied,
 }
 
 #[derive(Debug)]
