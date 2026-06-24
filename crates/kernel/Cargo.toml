@@ -1,0 +1,14 @@
+[package]
+name = "mvp-kernel"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait.workspace = true
+serde_json.workspace = true
+mvp-contract.workspace = true
+tracing.workspace = true
+anymap = "0.12.1"
+
+[dev-dependencies]
+tokio.workspace = true

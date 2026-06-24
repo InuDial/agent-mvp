@@ -1,0 +1,44 @@
+use mvp_contract::{Capability, ToolName};
+
+#[derive(Debug)]
+pub enum ToolError {
+    UnknownTool(ToolName),
+    DuplicateTool(ToolName),
+    InvalidSpec,
+    InvalidInput(InputError),
+    Authorization(AuthorizationError),
+    Execution(ExecutionError),
+    OutputAuthorization(OutputAuthorizationError),
+    FinalOutput(OutputAuthorizationError),
+}
+
+#[derive(Debug)]
+pub enum InputError {
+    MissingField(&'static str),
+    InvalidField(&'static str),
+}
+
+#[derive(Debug)]
+pub enum AuthorizationError {
+    MissingCapability(Capability),
+    OutsideWorkspace,
+    Io(std::io::Error),
+}
+
+#[derive(Debug)]
+pub enum ExecutionError {
+    Capability(CapabilityError),
+    Other(String),
+}
+
+#[derive(Debug)]
+pub enum OutputAuthorizationError {
+    Denied,
+}
+
+#[derive(Debug)]
+pub enum CapabilityError {
+    GrantMismatch,
+    Denied,
+    Io(std::io::Error),
+}
