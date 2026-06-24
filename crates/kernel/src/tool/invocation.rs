@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 
-/// Per-call parameters supplied by the caller.
+/// Per-call ambient parameters supplied by the caller.
 ///
-/// This is intentionally cheap and one-shot: `ToolPlane` builds the internal
-/// `ToolPlaneContext` for each invocation instead of exposing a reusable scope.
-#[derive(Clone, Debug)]
+/// These parameters describe invocation environment such as workspace root.
+/// Runtime authority, such as effective capabilities, is tracked separately by
+/// the kernel on each invocation frame.
+#[derive(Debug)]
 pub struct InvocationParams {
     pub(crate) workspace_root: PathBuf,
 }

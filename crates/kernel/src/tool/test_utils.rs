@@ -53,6 +53,6 @@ pub fn context<'a>(
         crate::service::fs::StdFs::new(),
         DenyNetwork,
     )));
-    let params = crate::tool::InvocationParams::new(root);
-    ToolPlaneContext::new(plane, registration, params)
+    let params = Box::leak(Box::new(crate::tool::InvocationParams::new(root)));
+    ToolPlaneContext::new(plane, registration, params, None)
 }

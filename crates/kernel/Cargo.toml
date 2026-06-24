@@ -9,6 +9,6 @@ serde_json.workspace = true
 mvp-contract.workspace = true
 tracing.workspace = true
 anymap = "0.12.1"
+tokio.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true

@@ -259,9 +259,9 @@ where
 
 /// Built-in coarse capability gate.
 ///
-/// This policy only vetoes actions that exceed the declared capability envelope.
-/// If the action is inside the envelope, it abstains and lets more specific
-/// policies decide whether to allow it.
+/// This policy only vetoes actions that exceed the current effective capability
+/// envelope. If the action is inside the envelope, it abstains and lets more
+/// specific policies decide whether to allow it.
 pub struct CapabilityEnvelopePolicy;
 
 #[async_trait]
@@ -301,7 +301,8 @@ impl<Ctx: PolicyContext> PolicyAny<Ctx> for DefaultAllowPolicy {
 pub struct PolicyPlane<Ctx: PolicyContext> {
     next_policy_id: PolicyId,
     policy_entries: SyncAnyMap,
-    global_policies: VecDeque<RegisteredPolicyAny<Ctx>>,
+    global_policies_inbound: VecDeque<RegisteredPolicyAny<Ctx>>,
+    global_policies_outbound: VecDeque<RegisteredPolicyAny<Ctx>>,
 }
 
 impl<Ctx: PolicyContext> Default for PolicyPlane<Ctx> {
@@ -315,7 +316,8 @@ impl<Ctx: PolicyContext> PolicyPlane<Ctx> {
         Self {
             next_policy_id: 1,
             policy_entries: AnyMap::new(),
-            global_policies: VecDeque::new(),
+            global_policies_inbound: VecDeque::new(),
+            global_policies_outbound: VecDeque::new(),
         }
     }
 
@@ -356,26 +358,51 @@ impl<Ctx: PolicyContext> PolicyPlane<Ctx> {
         self.get_mut_or_default::<A>().push_back(registered);
     }
 
-    pub fn prepend_global<P>(&mut self, policy: P)
+    pub fn prepend_inbound<P>(&mut self, policy: P)
     where
         P: PolicyAny<Ctx> + 'static,
     {
         let policy_id = self.allocate_policy_id();
-        self.global_policies.push_front(RegisteredPolicyAny {
+        self.global_policies_inbound
+            .push_front(RegisteredPolicyAny {
+                id: policy_id,
+                inner: Box::new(policy),
+            });
+    }
+
+    pub fn append_inbound<P>(&mut self, policy: P)
+    where
+        P: PolicyAny<Ctx> + 'static,
+    {
+        let policy_id = self.allocate_policy_id();
+        self.global_policies_inbound.push_back(RegisteredPolicyAny {
             id: policy_id,
             inner: Box::new(policy),
         });
     }
 
-    pub fn append_global<P>(&mut self, policy: P)
+    pub fn prepend_outbound<P>(&mut self, policy: P)
     where
         P: PolicyAny<Ctx> + 'static,
     {
         let policy_id = self.allocate_policy_id();
-        self.global_policies.push_back(RegisteredPolicyAny {
-            id: policy_id,
-            inner: Box::new(policy),
-        });
+        self.global_policies_outbound
+            .push_front(RegisteredPolicyAny {
+                id: policy_id,
+                inner: Box::new(policy),
+            });
+    }
+
+    pub fn append_outbound<P>(&mut self, policy: P)
+    where
+        P: PolicyAny<Ctx> + 'static,
+    {
+        let policy_id = self.allocate_policy_id();
+        self.global_policies_outbound
+            .push_back(RegisteredPolicyAny {
+                id: policy_id,
+                inner: Box::new(policy),
+            });
     }
 
     pub async fn grant<A>(&self, ctx: &Ctx, action: A) -> Result<Granted<A>, AuthorizationError>
@@ -386,6 +413,25 @@ impl<Ctx: PolicyContext> PolicyPlane<Ctx> {
         let resource = action.audit_resource();
 
         async {
+            for policy in &self.global_policies_inbound {
+                let decision = policy.inner.grant(ctx, &action).await;
+                match decision {
+                    PolicyDecision::Allow { .. } | PolicyDecision::Abstain => {}
+                    PolicyDecision::Deny { reason } => {
+                        let reason = reason.unwrap_or_else(|| "policy denied action".into());
+                        let record = GrantRecord::deny_from_policy(
+                            action_kind,
+                            resource.clone(),
+                            policy.inner.name(),
+                            policy.id,
+                            Some(reason.clone()),
+                        );
+                        audit::record_grant(&record);
+                        return Err(AuthorizationError::Denied(reason));
+                    }
+                }
+            }
+
             if let Some(entries) = self
                 .policy_entries
                 .get::<VecDeque<RegisteredPolicy<Ctx, A>>>()
@@ -423,7 +469,7 @@ impl<Ctx: PolicyContext> PolicyPlane<Ctx> {
                 }
             }
 
-            for policy in &self.global_policies {
+            for policy in &self.global_policies_outbound {
                 let decision = policy.inner.grant(ctx, &action).await;
                 match decision {
                     PolicyDecision::Allow { reason } => {

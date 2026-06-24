@@ -1,9 +1,10 @@
-use tracing::{Span, info, info_span};
+use tracing::{Span, info, info_span, warn};
 
 use crate::action::AuditResource;
 use crate::error::ExecutionError;
 use crate::policy::{GrantDecision, GrantRecord, GrantSource};
 use crate::tool::{GrantId, ToolRegistration};
+use mvp_contract::{Capabilities, ToolName};
 
 pub const AUDIT_TARGET: &str = "tool_plane::audit";
 
@@ -13,6 +14,62 @@ pub fn tool_invocation_span(registration: &ToolRegistration) -> Span {
         "tool.invoke",
         tool = %registration.spec().name,
     )
+}
+
+pub(crate) fn record_tool_capabilities_override(
+    registration: &ToolRegistration,
+    declared_capabilities: Capabilities,
+    effective_capabilities: Capabilities,
+) {
+    let exceeds_declared = !declared_capabilities.contains(effective_capabilities);
+
+    if exceeds_declared {
+        info!(
+            target: AUDIT_TARGET,
+            event = "tool.capabilities_overridden",
+            tool = %registration.spec().name,
+            declared_capabilities = declared_capabilities.bits(),
+            effective_capabilities = effective_capabilities.bits(),
+        );
+    }
+}
+
+pub(crate) fn record_nested_capability_override(
+    parent_registration: &ToolRegistration,
+    child_tool: &ToolName,
+    parent_effective_capabilities: Capabilities,
+    requested_capabilities_override: Option<Capabilities>,
+    actual_child_capabilities: Option<Capabilities>,
+    attempted_expand: bool,
+) {
+    let requested_capabilities_override =
+        requested_capabilities_override.map(|capabilities| capabilities.bits());
+    let actual_child_capabilities =
+        actual_child_capabilities.map(|capabilities| capabilities.bits());
+
+    if attempted_expand {
+        warn!(
+            target: AUDIT_TARGET,
+            event = "nested_tool_scope",
+            parent_tool = %parent_registration.spec().name,
+            child_tool = %child_tool,
+            parent_effective_capabilities = parent_effective_capabilities.bits(),
+            requested_capabilities_override = ?requested_capabilities_override,
+            actual_child_capabilities = ?actual_child_capabilities,
+            attempted_expand = true,
+        );
+    } else {
+        info!(
+            target: AUDIT_TARGET,
+            event = "nested_tool_scope",
+            parent_tool = %parent_registration.spec().name,
+            child_tool = %child_tool,
+            parent_effective_capabilities = parent_effective_capabilities.bits(),
+            requested_capabilities_override = ?requested_capabilities_override,
+            actual_child_capabilities = ?actual_child_capabilities,
+            attempted_expand = false,
+        );
+    }
 }
 
 pub fn parse_input_span() -> Span {

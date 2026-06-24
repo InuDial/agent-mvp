@@ -57,7 +57,7 @@ mod tests {
     use crate::error::AuthorizationError;
     use crate::service::network::DenyNetwork;
     use crate::tool::{ToolPlane, ToolPlaneContext, test_utils::*};
-    use mvp_contract::Capability;
+    use mvp_contract::{Capabilities, Capability};
 
     #[tokio::test]
     async fn exact_file_policy_only_allows_one_path() {
@@ -72,7 +72,7 @@ mod tests {
         plane
             .policy
             .append::<FsReadAction, _>(AllowExactFileReadPolicy::new(target.clone()));
-        let ctx = ToolPlaneContext::new(&plane, reg, params).unwrap();
+        let ctx = ToolPlaneContext::new(&plane, reg, &params, None).unwrap();
 
         let ok = ctx.fs().read_file("allowed.txt").await;
         assert!(ok.is_ok());
@@ -97,7 +97,7 @@ mod tests {
         plane
             .policy
             .append::<FsReadAction, _>(AllowFileReadPrefixPolicy::new(ws.root.join("src")));
-        let ctx = ToolPlaneContext::new(&plane, reg, params).unwrap();
+        let ctx = ToolPlaneContext::new(&plane, reg, &params, None).unwrap();
 
         let ok = ctx.fs().read_file("src/main.rs").await;
         assert!(ok.is_ok());
@@ -121,9 +121,29 @@ mod tests {
         plane
             .policy
             .append::<FsReadAction, _>(AllowWorkspaceReadPolicy);
-        let ctx = ToolPlaneContext::new(&plane, reg, params).unwrap();
+        let ctx = ToolPlaneContext::new(&plane, reg, &params, None).unwrap();
 
         let content = ctx.fs().read_file("a/b/file.txt").await.unwrap();
         assert_eq!(content, "all");
+    }
+
+    #[tokio::test]
+    async fn effective_capabilities_can_shrink_service_access() {
+        let ws = TempWorkspace::new();
+        std::fs::write(ws.root.join("hello.txt"), "hello").unwrap();
+
+        let reg = Box::leak(Box::new(registration([Capability::FsRead].into())));
+        let params = crate::tool::InvocationParams::new(&ws.root);
+        let mut plane = ToolPlane::new(StdFs::new(), DenyNetwork);
+        plane
+            .policy
+            .append::<FsReadAction, _>(AllowWorkspaceReadPolicy);
+        let ctx = ToolPlaneContext::new(&plane, reg, &params, Some(Capabilities::empty())).unwrap();
+
+        let denied = ctx.fs().read_file("hello.txt").await;
+        assert!(matches!(
+            denied,
+            Err(ExecutionError::Authorization(AuthorizationError::Denied(_)))
+        ));
     }
 }

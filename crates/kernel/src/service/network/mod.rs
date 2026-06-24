@@ -73,7 +73,7 @@ mod tests {
             .append::<NetworkFetchAction, _>(AllowExactUrlFetchPolicy::new(
                 "https://example.test/hello",
             ));
-        let ctx = ToolPlaneContext::new(&plane, reg, params).unwrap();
+        let ctx = ToolPlaneContext::new(&plane, reg, &params, None).unwrap();
 
         let body = ctx
             .network()
@@ -96,7 +96,7 @@ mod tests {
         plane
             .policy
             .append::<NetworkFetchAction, _>(AllowDomainFetchPolicy::new("example.test"));
-        let ctx = ToolPlaneContext::new(&plane, reg, params).unwrap();
+        let ctx = ToolPlaneContext::new(&plane, reg, &params, None).unwrap();
 
         let body = ctx
             .network()
@@ -113,7 +113,7 @@ mod tests {
         let reg = Box::leak(Box::new(registration(Capabilities::empty())));
         let params = crate::tool::InvocationParams::new(&ws.root);
         let plane = ToolPlane::new(StdFs::new(), network);
-        let ctx = ToolPlaneContext::new(&plane, reg, params).unwrap();
+        let ctx = ToolPlaneContext::new(&plane, reg, &params, None).unwrap();
 
         let denied = ctx.network().fetch_url("https://example.test/hello").await;
         assert!(matches!(

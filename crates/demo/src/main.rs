@@ -38,9 +38,11 @@ async fn main() {
     plane.register(Double).unwrap();
     plane.policy.append(AllowWorkspaceReadPolicy);
 
+    let params = InvocationParams::new(&root);
     let outcome = plane
         .invoke(
-            InvocationParams::new(&root),
+            &params,
+            Some([mvp_contract::Capability::FsRead].into()),
             ToolRequest {
                 name: "double".into(),
                 payload: json!({

@@ -31,7 +31,9 @@ impl sealed::SealedFs for StdFs {}
 #[async_trait]
 impl FsAccess for StdFs {
     async fn read_canonical(&self, path: &CanonicalPath) -> Result<String, CapabilityError> {
-        std::fs::read_to_string(path.as_path()).map_err(CapabilityError::Io)
+        tokio::fs::read_to_string(path.as_path())
+            .await
+            .map_err(CapabilityError::Io)
     }
 }
 

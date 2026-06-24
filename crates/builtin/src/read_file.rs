@@ -3,7 +3,7 @@ use mvp_contract::{Capability, OutputClassification, ToolOutcome, ToolSpec};
 use mvp_kernel::error::{InputError, ToolError};
 
 use mvp_kernel::tool::{ToolImpl, ToolPlaneContext};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub struct ReadFileTool;
 
@@ -93,9 +93,11 @@ mod tests {
         plane.register(ReadFileTool).unwrap();
         plane.policy.append(AllowWorkspaceReadPolicy);
 
+        let params = InvocationParams::new(&root);
         let outcome = plane
             .invoke(
-                InvocationParams::new(&root),
+                &params,
+                None,
                 ToolRequest {
                     name: "read_file".into(),
                     payload: json!({ "path": "hello.txt" }),

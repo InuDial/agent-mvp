@@ -25,7 +25,9 @@ pub enum OutputClassification {
 
 /// Per-tool metadata.
 ///
-/// `capabilities` is only a coarse-grained capability envelope. Fine-grained
+/// `capabilities` is the tool's declared default capability set. Individual
+/// invocations may still run under an explicitly overridden effective
+/// capability envelope, which is audited separately. Fine-grained
 /// authorization still happens later in policy / grant evaluation.
 #[derive(Clone, Debug)]
 pub struct ToolSpec {
@@ -83,11 +85,11 @@ impl Capability {
 }
 
 bitflags::bitflags! {
-    /// A coarse-grained capability envelope used for broad authorization.
+    /// A coarse-grained capability set used for broad authorization.
     ///
-    /// Each set bit means the tool may request operations in that exact coarse
-    /// slot. Fine-grained authorization is still enforced later by policy and
-    /// grants.
+    /// Each set bit means an invocation may request operations in that exact
+    /// coarse slot. Fine-grained authorization is still enforced later by
+    /// policy and grants.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
     pub struct Capabilities: u64 {
         const _ = !0;

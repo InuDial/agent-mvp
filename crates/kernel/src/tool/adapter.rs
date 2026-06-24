@@ -39,6 +39,8 @@ pub trait ToolImpl: Send + Sync + 'static {
         ctx: &ToolPlaneContext<'_>,
         input: Self::Input,
     ) -> Result<Self::Output, ToolError>;
+
+    // TODO: use schema + serde
 }
 
 /// Runtime adapter around a user-provided `ToolImpl`.
