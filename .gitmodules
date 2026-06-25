@@ -1,0 +1,3 @@
+[submodule "third_party/monty"]
+	path = third_party/monty
+	url = https://github.com/pydantic/monty.git
