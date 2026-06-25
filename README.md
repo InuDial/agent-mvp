@@ -64,11 +64,12 @@ Contains example tools that exercise the kernel pipeline.
 Current examples include:
 
 - `read_file`: reads a file through `ctx.fs()`
+- `write_file`: writes a file through `ctx.fs()`
 - `double`: invokes another tool twice to demonstrate nested invocation
 
 ### `crates/demo`
 
-Shows how a host creates a `ToolPlane`, registers tools, installs policy, and invokes tools.
+Shows how a host creates a `ToolPlane`, registers tools, installs policy, writes a file through `write_file`, and then reads it back through a nested `double -> read_file` invocation.
 
 ## Layering
 
@@ -110,7 +111,7 @@ At a high level, a call looks like this:
 3. The kernel builds a `ToolPlaneContext`
 4. The context computes the current `effective_capabilities`
 5. The tool parses input and executes
-6. If the tool calls a service such as `ctx.fs().read_file(...)`, the service builds an `Action`
+6. If the tool calls a service such as `ctx.fs().read_file(...)` or `ctx.fs().write_file(...)`, the service builds an `Action`
 7. The `PolicyPlane` evaluates authorization
 8. If granted, the action executes against the domain executor
 9. Audit records are emitted along the way
@@ -223,9 +224,11 @@ This gives a few benefits:
 
 ### 6. Workspace boundary checks
 
-For filesystem reads, the path is canonicalized and checked to remain under the workspace root before execution.
+For filesystem reads, the target path is canonicalized and checked to remain under the workspace root before execution.
 
-This helps prevent obvious path-escape issues such as `../` traversal from bypassing workspace boundaries.
+For filesystem writes, existing targets are canonicalized directly. New targets are authorized by canonicalizing the parent directory first and then re-attaching the file name.
+
+This helps prevent obvious path-escape issues such as `../` traversal from bypassing workspace boundaries while still allowing creation of new files inside the workspace.
 
 ### 7. Auditability
 
@@ -250,6 +253,15 @@ The current audit logs are intentionally verbose enough to explain not only *wha
 - declared capability: `FsRead`
 - implementation calls `ctx.fs().read_file(...)`
 - actual file access still requires matching policy, such as `AllowWorkspaceReadPolicy`
+
+### `write_file`
+
+`write_file` demonstrates the write side of the same service-backed pipeline:
+
+- declared capability: `FsWrite`
+- implementation calls `ctx.fs().write_file(...)`
+- actual file mutation still requires matching policy, such as `AllowWorkspaceWritePolicy`
+- current behavior is overwrite-or-create within an already authorized parent directory
 
 ### `double`
 
@@ -278,7 +290,7 @@ That would be a natural next step if this system grows.
 
 The current repository only has fleshed-out examples for:
 
-- filesystem reads
+- filesystem reads and writes
 - network fetches
 
 The `Capability` enum already hints at broader domains, but those services are not yet implemented here.

@@ -6,11 +6,16 @@ use crate::action::ExecutableAction;
 use crate::error::{CapabilityError, ExecutionError};
 use crate::policy::Granted;
 
-use super::action::{CanonicalPath, FsReadAction};
+use super::action::{CanonicalPath, FsReadAction, FsWriteAction};
 
 #[async_trait]
 pub trait FsAccess: Send + Sync {
     async fn read_canonical(&self, path: &CanonicalPath) -> Result<String, CapabilityError>;
+    async fn write_canonical(
+        &self,
+        path: &CanonicalPath,
+        content: &str,
+    ) -> Result<(), CapabilityError>;
 }
 
 #[derive(Default)]
@@ -29,6 +34,16 @@ impl FsAccess for StdFs {
             .await
             .map_err(CapabilityError::Io)
     }
+
+    async fn write_canonical(
+        &self,
+        path: &CanonicalPath,
+        content: &str,
+    ) -> Result<(), CapabilityError> {
+        tokio::fs::write(path.as_path(), content)
+            .await
+            .map_err(CapabilityError::Io)
+    }
 }
 
 impl ExecutableAction for FsReadAction {
@@ -44,6 +59,25 @@ impl ExecutableAction for FsReadAction {
     {
         Box::pin(async move {
             fs.read_canonical(&granted.action.path)
+                .await
+                .map_err(ExecutionError::Capability)
+        })
+    }
+}
+
+impl ExecutableAction for FsWriteAction {
+    type Executor<'a> = dyn FsAccess + 'a;
+    type Output = ();
+
+    fn execute<'a>(
+        fs: &'a Self::Executor<'a>,
+        granted: Granted<Self>,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Output, ExecutionError>> + Send + 'a>>
+    where
+        Self: 'a,
+    {
+        Box::pin(async move {
+            fs.write_canonical(&granted.action.path, &granted.action.content)
                 .await
                 .map_err(ExecutionError::Capability)
         })

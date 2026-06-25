@@ -1,10 +1,10 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use mvp_builtin::{double::Double, read_file::ReadFileTool};
+use mvp_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
 use mvp_contract::ToolRequest;
 use mvp_kernel::{
     service::{
-        fs::{AllowWorkspaceReadPolicy, StdFs},
+        fs::{AllowWorkspaceReadPolicy, AllowWorkspaceWritePolicy, StdFs},
         network::DenyNetwork,
     },
     tool::{InvocationParams, ToolPlane},
@@ -31,15 +31,31 @@ async fn main() {
     ));
 
     std::fs::create_dir_all(&root).unwrap();
-    std::fs::write(root.join("hello.txt"), "hello from demo").unwrap();
 
     let mut plane = ToolPlane::new(StdFs::new(), DenyNetwork);
+    plane.register(WriteFileTool).unwrap();
     plane.register(ReadFileTool).unwrap();
     plane.register(Double).unwrap();
+    plane.policy.append(AllowWorkspaceWritePolicy);
     plane.policy.append(AllowWorkspaceReadPolicy);
 
     let params = InvocationParams::new(&root);
-    let outcome = plane
+    let write_outcome = plane
+        .invoke(
+            &params,
+            Some([mvp_contract::Capability::FsWrite].into()),
+            ToolRequest {
+                name: "write_file".into(),
+                payload: json!({
+                    "path": "hello.txt",
+                    "content": "hello from demo",
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+    let read_outcome = plane
         .invoke(
             &params,
             Some([mvp_contract::Capability::FsRead].into()),
@@ -54,7 +70,8 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("outcome:\n{outcome:#?}");
+    println!("write_outcome:\n{write_outcome:#?}");
+    println!("read_outcome:\n{read_outcome:#?}");
 
     std::fs::remove_dir_all(root).unwrap();
 }
