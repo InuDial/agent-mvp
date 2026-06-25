@@ -132,7 +132,7 @@ A tool has declared capabilities in `ToolSpec`.
 
 Those declared capabilities are treated as the tool’s **default capability set**, not as a permanent hard upper bound.
 
-At runtime, what actually matters is the invocation’s **effective capabilities**.
+At runtime, what actually matters is the invocation’s **effective capabilities**. That effective envelope is carried by the kernel per invocation and then enforced by the policy plane during action authorization.
 
 - top-level invocation with `None` override uses the tool’s declared capabilities as default
 - top-level invocation with `Some(capabilities)` runs under that explicit effective capability set

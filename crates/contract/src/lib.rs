@@ -25,14 +25,22 @@ pub enum OutputClassification {
 
 /// Per-tool metadata.
 ///
-/// `capabilities` is the tool's declared default capability set. Individual
-/// invocations may still run under an explicitly overridden effective
-/// capability envelope, which is audited separately. Fine-grained
-/// authorization still happens later in policy / grant evaluation.
+/// `capabilities` is the tool's declared default capability set.
+///
+/// It is used as the default effective capability envelope when a top-level
+/// invocation does not provide an override. The invocation's actual effective
+/// capabilities are carried by the kernel's runtime context and enforced later
+/// through the policy plane during action / grant evaluation.
 #[derive(Clone, Debug)]
 pub struct ToolSpec {
     pub name: ToolName,
     pub description: ToolDescription,
+    /// Declared default capability set for this tool.
+    ///
+    /// This is not, by itself, the source of truth for every invocation's final
+    /// effective capabilities. The kernel may supply a per-invocation effective
+    /// capability envelope, and the policy plane is responsible for enforcing
+    /// that envelope during authorization.
     pub capabilities: Capabilities,
     // etc
 }
