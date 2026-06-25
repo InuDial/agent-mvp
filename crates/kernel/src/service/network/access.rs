@@ -8,18 +8,12 @@ use crate::policy::Granted;
 
 use super::action::NetworkFetchAction;
 
-mod sealed {
-    pub trait SealedNetwork {}
-}
-
 #[async_trait]
-pub trait NetworkAccess: sealed::SealedNetwork + Send + Sync {
+pub trait NetworkAccess: Send + Sync {
     async fn fetch_url(&self, url: &str) -> Result<Vec<u8>, CapabilityError>;
 }
 
 pub struct DenyNetwork;
-
-impl sealed::SealedNetwork for DenyNetwork {}
 
 #[async_trait]
 impl NetworkAccess for DenyNetwork {
@@ -39,8 +33,6 @@ impl StaticNetwork {
         }
     }
 }
-
-impl sealed::SealedNetwork for StaticNetwork {}
 
 #[async_trait]
 impl NetworkAccess for StaticNetwork {

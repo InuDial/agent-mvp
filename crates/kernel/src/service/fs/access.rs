@@ -8,12 +8,8 @@ use crate::policy::Granted;
 
 use super::action::{CanonicalPath, FsReadAction};
 
-mod sealed {
-    pub trait SealedFs {}
-}
-
 #[async_trait]
-pub trait FsAccess: sealed::SealedFs + Send + Sync {
+pub trait FsAccess: Send + Sync {
     async fn read_canonical(&self, path: &CanonicalPath) -> Result<String, CapabilityError>;
 }
 
@@ -25,8 +21,6 @@ impl StdFs {
         Self
     }
 }
-
-impl sealed::SealedFs for StdFs {}
 
 #[async_trait]
 impl FsAccess for StdFs {
