@@ -1,5 +1,5 @@
 use crate::error::ExecutionError;
-use crate::policy::{PolicyContext, PolicyPlane};
+use crate::policy::{PolicyContext, PolicyEngine, PolicyPlane};
 
 pub mod access;
 pub mod action;

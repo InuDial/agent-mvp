@@ -298,6 +298,17 @@ impl<Ctx: PolicyContext> PolicyAny<Ctx> for DefaultAllowPolicy {
     }
 }
 
+#[async_trait]
+pub trait PolicyEngine {
+    type Ctx: PolicyContext;
+
+    async fn grant<A: Action>(
+        &self,
+        ctx: &Self::Ctx,
+        action: A,
+    ) -> Result<Granted<A>, AuthorizationError>;
+}
+
 pub struct PolicyPlane<Ctx: PolicyContext> {
     next_policy_id: PolicyId,
     policy_entries: SyncAnyMap,
@@ -311,104 +322,17 @@ impl<Ctx: PolicyContext> Default for PolicyPlane<Ctx> {
     }
 }
 
-impl<Ctx: PolicyContext> PolicyPlane<Ctx> {
-    pub fn new() -> Self {
-        Self {
-            next_policy_id: 1,
-            policy_entries: AnyMap::new(),
-            global_policies_inbound: VecDeque::new(),
-            global_policies_outbound: VecDeque::new(),
-        }
-    }
-
-    fn allocate_policy_id(&mut self) -> PolicyId {
-        let id = self.next_policy_id;
-        self.next_policy_id += 1;
-        id
-    }
-
-    fn get_mut_or_default<A>(&mut self) -> &mut VecDeque<RegisteredPolicy<Ctx, A>>
-    where
-        A: Action,
-    {
-        self.policy_entries.entry().or_insert_with(VecDeque::new)
-    }
-
-    pub fn prepend<A, P>(&mut self, policy: P)
-    where
-        A: Action,
-        P: Policy<Ctx, A> + 'static,
-    {
-        let registered = RegisteredPolicy {
-            id: self.allocate_policy_id(),
-            inner: Box::new(policy),
-        };
-        self.get_mut_or_default::<A>().push_front(registered);
-    }
-
-    pub fn append<A, P>(&mut self, policy: P)
-    where
-        A: Action,
-        P: Policy<Ctx, A> + 'static,
-    {
-        let registered = RegisteredPolicy {
-            id: self.allocate_policy_id(),
-            inner: Box::new(policy),
-        };
-        self.get_mut_or_default::<A>().push_back(registered);
-    }
-
-    pub fn prepend_inbound<P>(&mut self, policy: P)
-    where
-        P: PolicyAny<Ctx> + 'static,
-    {
-        let policy_id = self.allocate_policy_id();
-        self.global_policies_inbound
-            .push_front(RegisteredPolicyAny {
-                id: policy_id,
-                inner: Box::new(policy),
-            });
-    }
-
-    pub fn append_inbound<P>(&mut self, policy: P)
-    where
-        P: PolicyAny<Ctx> + 'static,
-    {
-        let policy_id = self.allocate_policy_id();
-        self.global_policies_inbound.push_back(RegisteredPolicyAny {
-            id: policy_id,
-            inner: Box::new(policy),
-        });
-    }
-
-    pub fn prepend_outbound<P>(&mut self, policy: P)
-    where
-        P: PolicyAny<Ctx> + 'static,
-    {
-        let policy_id = self.allocate_policy_id();
-        self.global_policies_outbound
-            .push_front(RegisteredPolicyAny {
-                id: policy_id,
-                inner: Box::new(policy),
-            });
-    }
-
-    pub fn append_outbound<P>(&mut self, policy: P)
-    where
-        P: PolicyAny<Ctx> + 'static,
-    {
-        let policy_id = self.allocate_policy_id();
-        self.global_policies_outbound
-            .push_back(RegisteredPolicyAny {
-                id: policy_id,
-                inner: Box::new(policy),
-            });
-    }
-
-    pub async fn grant<A>(&self, ctx: &Ctx, action: A) -> Result<Granted<A>, AuthorizationError>
-    where
-        A: Action,
-    {
+#[async_trait]
+impl<Ctx> PolicyEngine for PolicyPlane<Ctx>
+where
+    Ctx: PolicyContext,
+{
+    type Ctx = Ctx;
+    async fn grant<A: Action>(
+        &self,
+        ctx: &Ctx,
+        action: A,
+    ) -> Result<Granted<A>, AuthorizationError> {
         let action_kind = action.audit_kind();
         let resource = action.audit_resource();
 
@@ -509,5 +433,100 @@ impl<Ctx: PolicyContext> PolicyPlane<Ctx> {
         }
         .instrument(audit::action_grant_span(action_kind))
         .await
+    }
+}
+
+impl<Ctx: PolicyContext> PolicyPlane<Ctx> {
+    pub fn new() -> Self {
+        Self {
+            next_policy_id: 1,
+            policy_entries: AnyMap::new(),
+            global_policies_inbound: VecDeque::new(),
+            global_policies_outbound: VecDeque::new(),
+        }
+    }
+
+    fn allocate_policy_id(&mut self) -> PolicyId {
+        let id = self.next_policy_id;
+        self.next_policy_id += 1;
+        id
+    }
+
+    fn get_mut_or_default<A>(&mut self) -> &mut VecDeque<RegisteredPolicy<Ctx, A>>
+    where
+        A: Action,
+    {
+        self.policy_entries.entry().or_insert_with(VecDeque::new)
+    }
+
+    pub fn prepend<A, P>(&mut self, policy: P)
+    where
+        A: Action,
+        P: Policy<Ctx, A> + 'static,
+    {
+        let registered = RegisteredPolicy {
+            id: self.allocate_policy_id(),
+            inner: Box::new(policy),
+        };
+        self.get_mut_or_default::<A>().push_front(registered);
+    }
+
+    pub fn append<A, P>(&mut self, policy: P)
+    where
+        A: Action,
+        P: Policy<Ctx, A> + 'static,
+    {
+        let registered = RegisteredPolicy {
+            id: self.allocate_policy_id(),
+            inner: Box::new(policy),
+        };
+        self.get_mut_or_default::<A>().push_back(registered);
+    }
+
+    pub fn prepend_inbound<P>(&mut self, policy: P)
+    where
+        P: PolicyAny<Ctx> + 'static,
+    {
+        let policy_id = self.allocate_policy_id();
+        self.global_policies_inbound
+            .push_front(RegisteredPolicyAny {
+                id: policy_id,
+                inner: Box::new(policy),
+            });
+    }
+
+    pub fn append_inbound<P>(&mut self, policy: P)
+    where
+        P: PolicyAny<Ctx> + 'static,
+    {
+        let policy_id = self.allocate_policy_id();
+        self.global_policies_inbound.push_back(RegisteredPolicyAny {
+            id: policy_id,
+            inner: Box::new(policy),
+        });
+    }
+
+    pub fn prepend_outbound<P>(&mut self, policy: P)
+    where
+        P: PolicyAny<Ctx> + 'static,
+    {
+        let policy_id = self.allocate_policy_id();
+        self.global_policies_outbound
+            .push_front(RegisteredPolicyAny {
+                id: policy_id,
+                inner: Box::new(policy),
+            });
+    }
+
+    pub fn append_outbound<P>(&mut self, policy: P)
+    where
+        P: PolicyAny<Ctx> + 'static,
+    {
+        let policy_id = self.allocate_policy_id();
+        self.global_policies_outbound
+            .push_back(RegisteredPolicyAny {
+                id: policy_id,
+                inner: Box::new(policy),
+            });
     }
 }
