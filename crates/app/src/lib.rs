@@ -13,7 +13,7 @@ use mvp_kernel::{
         CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
     },
     service::{
-        fs::{AllowWorkspaceFsPolicy, CanonicalRoot, FsAccess, FsAction, FsService},
+        fs::{CanonicalRoot, FsAccess, FsService},
         network::{NetworkAccess, NetworkService},
     },
     tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
@@ -190,6 +190,7 @@ mod tests {
 
     use async_trait::async_trait;
     use mvp_contract::{Capabilities, Capability, OutputClassification, ToolSpec};
+    use mvp_kernel::service::fs::AllowWorkspaceFsPolicy;
     use mvp_kernel::{
         error::{AuthorizationError, ExecutionError, InputError},
         service::fs::{AllowWorkspaceReadPolicy, FsService, FsToolContextExt},
@@ -336,6 +337,7 @@ mod tests {
 
         let mut app = App::new();
         app.register(ReadWorkspaceFileTool).unwrap();
+        app.policy.append(AllowWorkspaceFsPolicy);
         app.policy.append(AllowWorkspaceReadPolicy);
 
         let outcome = app
@@ -358,6 +360,7 @@ mod tests {
 
         let mut app = App::new();
         app.register(ReadWorkspaceFileTool).unwrap();
+        app.policy.append(AllowWorkspaceFsPolicy);
         app.policy.append(AllowWorkspaceReadPolicy);
 
         let err = app
