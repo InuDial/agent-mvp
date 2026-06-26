@@ -8,7 +8,6 @@ use crate::{error::ToolError, kernel::Kernel, policy::PolicyContextFactory};
 
 #[async_trait]
 pub trait ToolContext<K: Kernel + ?Sized>: Sync {
-    fn kernel(&self) -> &K;
     fn policy_context(&self) -> <K::PolicyCxFactory as PolicyContextFactory>::Context<'_>;
     fn effective_capabilities(&self) -> Capabilities;
     fn registration(&self) -> &super::registration::ToolRegistration;

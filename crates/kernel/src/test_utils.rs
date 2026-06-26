@@ -1,8 +1,11 @@
 use crate::kernel::Kernel;
 use crate::service::fs::{
-    AllowWorkspaceFsPolicy, CanonicalRoot, FsAccess, FsAction, FsService, StdFs,
+    AllowWorkspaceFsPolicy, CanonicalRoot, FsAction, FsBackend, FsService, HasFsBackend,
+    HasFsService, StdFsBackend,
 };
-use crate::service::network::{NetworkAccess, NetworkService, StaticNetwork};
+use crate::service::network::{
+    HasNetworkBackend, HasNetworkService, NetworkBackend, NetworkService, StaticNetworkBackend,
+};
 use crate::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
 use crate::{
     audit,
@@ -64,8 +67,8 @@ pub fn registration(capabilities: Capabilities) -> ToolRegistration {
 
 pub struct MockKernel {
     tools: BTreeMap<ToolName, RegisteredTool<MockKernel>>,
-    fs: StdFs,
-    network: StaticNetwork,
+    fs: StdFsBackend,
+    network: StaticNetworkBackend,
     pub policy: PolicyPlane<KernelPolicyContextFactory>,
 }
 
@@ -77,15 +80,15 @@ impl MockKernel {
 
         Self {
             tools: BTreeMap::new(),
-            fs: StdFs,
-            network: StaticNetwork::new(std::iter::empty::<(String, Vec<u8>)>()),
+            fs: StdFsBackend,
+            network: StaticNetworkBackend::new(std::iter::empty::<(String, Vec<u8>)>()),
             policy,
         }
     }
 
     pub fn with_network(responses: impl IntoIterator<Item = (String, Vec<u8>)>) -> Self {
         Self {
-            network: StaticNetwork::new(responses),
+            network: StaticNetworkBackend::new(responses),
             ..Self::new()
         }
     }
@@ -107,14 +110,14 @@ impl Default for MockKernel {
     }
 }
 
-impl FsService for MockKernel {
-    fn fs_access(&self) -> &dyn FsAccess {
+impl HasFsBackend for MockKernel {
+    fn fs_backend(&self) -> &dyn FsBackend {
         &self.fs
     }
 }
 
-impl NetworkService for MockKernel {
-    fn network_access(&self) -> &dyn NetworkAccess {
+impl HasNetworkBackend for MockKernel {
+    fn network_backend(&self) -> &dyn NetworkBackend {
         &self.network
     }
 }
@@ -150,10 +153,6 @@ impl<'a> MockToolContext<'a> {
 
 #[async_trait]
 impl ToolContext<MockKernel> for MockToolContext<'_> {
-    fn kernel(&self) -> &MockKernel {
-        self.kernel
-    }
-
     fn policy_context(&self) -> KernelPolicyContext<'_> {
         KernelPolicyContext::new(self.effective_capabilities, &self.canonical_workspace_root)
     }
@@ -208,6 +207,18 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
 
         let params = InvocationParams::new(self.workspace_root(), Some(effective_capabilities));
         self.kernel.invoke(path, &params, payload).await
+    }
+}
+
+impl HasFsService<MockKernel> for MockToolContext<'_> {
+    fn fs(&self) -> FsService<'_, MockKernel> {
+        FsService::new(self.kernel, self.workspace_root(), self.policy_context())
+    }
+}
+
+impl HasNetworkService<MockKernel> for MockToolContext<'_> {
+    fn network(&self) -> NetworkService<'_, MockKernel> {
+        NetworkService::new(self.kernel, self.policy_context())
     }
 }
 

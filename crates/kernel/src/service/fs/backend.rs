@@ -9,7 +9,7 @@ use crate::policy::Granted;
 use super::action::{CanonicalPath, FsReadAction, FsWriteAction};
 
 #[async_trait]
-pub trait FsAccess: Send + Sync {
+pub trait FsBackend: Send + Sync {
     async fn read_canonical(&self, path: &CanonicalPath) -> Result<String, CapabilityError>;
     async fn write_canonical(
         &self,
@@ -19,16 +19,16 @@ pub trait FsAccess: Send + Sync {
 }
 
 #[derive(Default)]
-pub struct StdFs;
+pub struct StdFsBackend;
 
-impl StdFs {
+impl StdFsBackend {
     pub fn new() -> Self {
         Self
     }
 }
 
 #[async_trait]
-impl FsAccess for StdFs {
+impl FsBackend for StdFsBackend {
     async fn read_canonical(&self, path: &CanonicalPath) -> Result<String, CapabilityError> {
         tokio::fs::read_to_string(path.as_path())
             .await
@@ -47,7 +47,7 @@ impl FsAccess for StdFs {
 }
 
 impl ExecutableAction for FsReadAction {
-    type Executor<'a> = dyn FsAccess + 'a;
+    type Executor<'a> = dyn FsBackend + 'a;
     type Output = String;
 
     fn execute<'a>(
@@ -66,7 +66,7 @@ impl ExecutableAction for FsReadAction {
 }
 
 impl ExecutableAction for FsWriteAction {
-    type Executor<'a> = dyn FsAccess + 'a;
+    type Executor<'a> = dyn FsBackend + 'a;
     type Output = ();
 
     fn execute<'a>(

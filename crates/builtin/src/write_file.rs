@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use mvp_contract::{Capability, OutputClassification, ToolOutcome, ToolSpec};
 use mvp_kernel::error::{InputError, ToolError};
 use mvp_kernel::kernel::Kernel;
-use mvp_kernel::service::fs::{FsService, FsToolContextExt};
+use mvp_kernel::service::fs::{HasFsBackend, HasFsService};
 use mvp_kernel::tool::ToolImpl;
 use serde_json::{Value, json};
 
@@ -27,7 +27,8 @@ impl From<WriteFileOutput> for ToolOutcome {
 #[async_trait]
 impl<K> ToolImpl<K> for WriteFileTool
 where
-    K: Kernel + FsService,
+    K: Kernel + HasFsBackend,
+    for<'a> K::ToolCx<'a>: HasFsService<K>,
 {
     type Input = WriteFileInput;
     type Output = WriteFileOutput;

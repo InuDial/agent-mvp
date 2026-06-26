@@ -5,8 +5,9 @@ Use this file when you see a type or pattern and want to know why it exists.
 | Design | Purpose | Main code |
 | --- | --- | --- |
 | `ToolImpl` | Lets user/builtin code express behavior without owning runtime authority. | `crates/kernel/src/tool/adapter.rs` |
-| `ToolContext` | Gives tools controlled access to services and nested invocation. | `crates/kernel/src/tool/context.rs` |
+| `ToolContext` | Gives tools controlled service facades and nested invocation without exposing backend handles. | `crates/kernel/src/tool/context.rs` |
 | Service facade | Converts ergonomic tool calls into auditable actions. | `crates/kernel/src/service/fs/mod.rs`, `crates/kernel/src/service/network/mod.rs` |
+| Backend | Performs direct domain operations after a service has obtained a grant. | `crates/kernel/src/service/fs/backend.rs`, `crates/kernel/src/service/network/backend.rs` |
 | `Action` | Makes side-effect intent explicit for policy and audit. | `crates/kernel/src/action.rs` |
 | `ExecutableAction` | Keeps execution domain-specific while preserving a shared grant flow. | `crates/kernel/src/action.rs` |
 | `PolicyPlane` | Centralizes authorization order and default deny behavior. | `crates/kernel/src/policy/plane.rs` |
@@ -39,4 +40,3 @@ If you want to understand one workflow end to end, start with filesystem read:
 5. `mvp-kernel/src/service/fs/policy.rs`: resource-specific policies
 6. `mvp-kernel/src/policy/grant.rs`: granted action execution
 7. `mvp-kernel/src/audit.rs`: audit event shape
-

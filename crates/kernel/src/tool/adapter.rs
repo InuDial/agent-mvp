@@ -23,7 +23,7 @@ pub(crate) trait ToolAdapter<K: Kernel>:
 
 /// Tool implementation supplied by builtins/plugins.
 ///
-/// The implementation receives only the total `ToolPlaneContext`. It may use
+/// The implementation receives only the tool context. It may use
 /// capability sub-contexts such as `ctx.fs()` or `ctx.network()`, but it cannot
 /// implement the sealed runtime `ToolAdapter` trait directly.
 #[async_trait]

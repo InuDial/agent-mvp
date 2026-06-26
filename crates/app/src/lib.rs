@@ -3,8 +3,8 @@ use std::path::Path;
 
 use async_trait::async_trait;
 use mvp_contract::{Capabilities, InvocationParams, ToolName, ToolOutcome};
-use mvp_kernel::service::fs::StdFs;
-use mvp_kernel::service::network::DenyNetwork;
+use mvp_kernel::service::fs::StdFsBackend;
+use mvp_kernel::service::network::DenyNetworkBackend;
 use mvp_kernel::{
     audit,
     error::{AuthorizationError, ToolError},
@@ -13,8 +13,8 @@ use mvp_kernel::{
         CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
     },
     service::{
-        fs::{CanonicalRoot, FsAccess, FsService},
-        network::{NetworkAccess, NetworkService},
+        fs::{CanonicalRoot, FsBackend, FsService, HasFsBackend, HasFsService},
+        network::{HasNetworkBackend, HasNetworkService, NetworkBackend, NetworkService},
     },
     tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
 };
@@ -22,9 +22,15 @@ use serde_json::Value;
 
 pub struct App {
     tools: BTreeMap<ToolName, RegisteredTool<App>>,
-    fs: StdFs,
-    network: DenyNetwork,
+    fs: StdFsBackend,
+    network: DenyNetworkBackend,
     pub policy: PolicyPlane<KernelPolicyContextFactory>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl App {
@@ -34,8 +40,8 @@ impl App {
 
         Self {
             tools: BTreeMap::new(),
-            fs: StdFs,
-            network: DenyNetwork,
+            fs: StdFsBackend,
+            network: DenyNetworkBackend,
             policy,
         }
     }
@@ -51,14 +57,14 @@ impl App {
     }
 }
 
-impl FsService for App {
-    fn fs_access(&self) -> &dyn FsAccess {
+impl HasFsBackend for App {
+    fn fs_backend(&self) -> &dyn FsBackend {
         &self.fs
     }
 }
 
-impl NetworkService for App {
-    fn network_access(&self) -> &dyn NetworkAccess {
+impl HasNetworkBackend for App {
+    fn network_backend(&self) -> &dyn NetworkBackend {
         &self.network
     }
 }
@@ -94,10 +100,6 @@ impl<'a> AppToolContext<'a> {
 
 #[async_trait]
 impl ToolContext<App> for AppToolContext<'_> {
-    fn kernel(&self) -> &App {
-        self.app
-    }
-
     fn policy_context(&self) -> KernelPolicyContext<'_> {
         KernelPolicyContext::new(self.effective_capabilities, &self.canonical_workspace_root)
     }
@@ -141,6 +143,18 @@ impl ToolContext<App> for AppToolContext<'_> {
 
         let params = InvocationParams::new(self.workspace_root(), Some(effective_capabilities));
         self.app.invoke(path, &params, payload).await
+    }
+}
+
+impl HasFsService<App> for AppToolContext<'_> {
+    fn fs(&self) -> FsService<'_, App> {
+        FsService::new(self.app, self.workspace_root(), self.policy_context())
+    }
+}
+
+impl HasNetworkService<App> for AppToolContext<'_> {
+    fn network(&self) -> NetworkService<'_, App> {
+        NetworkService::new(self.app, self.policy_context())
     }
 }
 
@@ -192,7 +206,7 @@ mod tests {
     use mvp_kernel::service::fs::AllowWorkspaceFsPolicy;
     use mvp_kernel::{
         error::{AuthorizationError, ExecutionError, InputError},
-        service::fs::{AllowWorkspaceReadPolicy, FsService, FsToolContextExt},
+        service::fs::{AllowWorkspaceReadPolicy, HasFsBackend, HasFsService},
     };
     use serde_json::{Value, json};
 
@@ -264,8 +278,8 @@ mod tests {
     #[async_trait]
     impl<K> ToolImpl<K> for ReadWorkspaceFileTool
     where
-        K: Kernel + FsService,
-        for<'a> K::ToolCx<'a>: ToolContext<K>,
+        K: Kernel + HasFsBackend,
+        for<'a> K::ToolCx<'a>: HasFsService<K>,
     {
         type Input = String;
         type Output = ToolOutcome;

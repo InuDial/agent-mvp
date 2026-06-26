@@ -67,7 +67,7 @@ where
 
     async fn grant(&self, _ctx: &F::Context<'_>, action: &NetworkFetchAction) -> PolicyGrant {
         let host = super::extract_host(&action.url);
-        let predicate = match host.as_deref() {
+        let predicate = match host {
             Some(host) => format!(
                 "host == domain || host ends_with .domain: {} == {} || {} ends_with .{}",
                 host, self.domain, host, self.domain

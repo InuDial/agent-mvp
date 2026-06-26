@@ -1,6 +1,6 @@
 //! Kernel trait implemented by concrete runtimes.
 //!
-//! A kernel wires registered tools, service executors, policy, and invocation
+//! A kernel wires registered tools, service backends, policy, and invocation
 //! context creation. Tools are generic over this trait so builtins can run on
 //! any compatible runtime.
 

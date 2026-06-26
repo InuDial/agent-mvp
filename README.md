@@ -83,6 +83,7 @@ The logical architecture is about runtime responsibility:
 - **Invocation** resolves the target tool and creates the per-call context.
 - **Tool context** carries workspace root, effective capabilities, services, and
   nested invocation.
+- **Tool context** exposes service facades, not kernel or backend handles.
 - **Tool implementation** parses input and asks the context for service access.
 - **Service facade** converts side-effect requests into semantic actions and
   executes only after policy returns a grant.
@@ -151,8 +152,8 @@ tests.
 It wires together:
 
 - registered tools
-- `StdFs`
-- `DenyNetwork`
+- `StdFsBackend`
+- `DenyNetworkBackend`
 - `PolicyPlane`
 - `CapabilityEnvelopePolicy`
 - per-call `AppToolContext`
@@ -185,7 +186,7 @@ A top-level call enters through `Kernel::invoke`:
 4. The tool executes against the context.
 5. Service calls create explicit actions such as `fs.read` or `network.fetch`.
 6. The policy plane evaluates the action.
-7. A granted action executes through the service executor.
+7. A granted action executes through the service backend.
 8. Audit records describe the invocation, grant decision, and execution result.
 
 Nested calls use the same path through `ToolContext::invoke_tool`. By default,
@@ -253,13 +254,17 @@ Current domains:
 - network fetch
 
 The facade constructs an action, asks policy for a grant, and only then delegates
-to the executor. This keeps tool logic, authorization, audit, and domain I/O in
+to the backend. This keeps tool logic, authorization, audit, and domain I/O in
 separate layers.
 
-Filesystem access also canonicalizes paths against the workspace root before
-execution. Existing write targets are canonicalized directly; new targets are
-checked by canonicalizing the parent directory and then re-attaching the file
-name.
+Backends perform direct domain operations. Tools receive service facades such as
+`ctx.fs()`, not backend handles, so ordinary tool code cannot bypass
+authorization.
+
+Filesystem services canonicalize paths against the workspace root before
+authorization and execution. Existing write targets are canonicalized directly;
+new targets are checked by canonicalizing the parent directory and then
+re-attaching the file name.
 
 The fs model uses canonical path types so policy comparisons happen in one path
 space:

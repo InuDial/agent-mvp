@@ -9,24 +9,24 @@ use crate::policy::Granted;
 use super::action::NetworkFetchAction;
 
 #[async_trait]
-pub trait NetworkAccess: Send + Sync {
+pub trait NetworkBackend: Send + Sync {
     async fn fetch_url(&self, url: &str) -> Result<Vec<u8>, CapabilityError>;
 }
 
-pub struct DenyNetwork;
+pub struct DenyNetworkBackend;
 
 #[async_trait]
-impl NetworkAccess for DenyNetwork {
+impl NetworkBackend for DenyNetworkBackend {
     async fn fetch_url(&self, _url: &str) -> Result<Vec<u8>, CapabilityError> {
         Err(CapabilityError::Denied)
     }
 }
 
-pub struct StaticNetwork {
+pub struct StaticNetworkBackend {
     responses: std::collections::BTreeMap<String, Vec<u8>>,
 }
 
-impl StaticNetwork {
+impl StaticNetworkBackend {
     pub fn new(responses: impl IntoIterator<Item = (String, Vec<u8>)>) -> Self {
         Self {
             responses: responses.into_iter().collect(),
@@ -35,7 +35,7 @@ impl StaticNetwork {
 }
 
 #[async_trait]
-impl NetworkAccess for StaticNetwork {
+impl NetworkBackend for StaticNetworkBackend {
     async fn fetch_url(&self, url: &str) -> Result<Vec<u8>, CapabilityError> {
         self.responses
             .get(url)
@@ -45,7 +45,7 @@ impl NetworkAccess for StaticNetwork {
 }
 
 impl ExecutableAction for NetworkFetchAction {
-    type Executor<'a> = dyn NetworkAccess + 'a;
+    type Executor<'a> = dyn NetworkBackend + 'a;
     type Output = Vec<u8>;
 
     fn execute<'a>(

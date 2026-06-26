@@ -8,38 +8,26 @@ use crate::kernel::Kernel;
 use crate::policy::{PolicyContextFactory, PolicyEngine};
 use crate::tool::ToolContext;
 
-pub mod access;
 pub mod action;
+pub mod backend;
 pub mod policy;
 
-pub use access::{DenyNetwork, NetworkAccess, StaticNetwork};
 pub use action::NetworkFetchAction;
+pub use backend::{DenyNetworkBackend, NetworkBackend, StaticNetworkBackend};
 pub use policy::{AllowDomainFetchPolicy, AllowExactUrlFetchPolicy};
 
-pub trait NetworkService {
-    fn network_access(&self) -> &dyn NetworkAccess;
+pub trait HasNetworkBackend {
+    fn network_backend(&self) -> &dyn NetworkBackend;
 }
 
-pub trait NetworkToolContextExt<K>: ToolContext<K>
+pub trait HasNetworkService<K>: ToolContext<K>
 where
-    K: NetworkService + Kernel,
+    K: HasNetworkBackend + Kernel,
 {
-    fn network(&self) -> NetworkContext<'_, K>
-    where
-        Self: Sized,
-    {
-        NetworkContext::new(self.kernel(), self.policy_context())
-    }
+    fn network(&self) -> NetworkService<'_, K>;
 }
 
-impl<K, T> NetworkToolContextExt<K> for T
-where
-    T: ToolContext<K>,
-    K: NetworkService + Kernel,
-{
-}
-
-/// Network sub-context exposed as `ctx.network()`.
+/// Network service facade exposed as `ctx.network()`.
 ///
 /// Public methods remain natural and function-like. Internally they follow the
 /// same pipeline: construct an action, ask policy to grant it, then execute the
@@ -47,17 +35,17 @@ where
 type PolicyContextFor<'a, K> =
     <<K as Kernel>::PolicyCxFactory as PolicyContextFactory>::Context<'a>;
 
-pub struct NetworkContext<'a, K>
+pub struct NetworkService<'a, K>
 where
-    K: Kernel + NetworkService + ?Sized,
+    K: Kernel + HasNetworkBackend + ?Sized,
 {
     kernel: &'a K,
     policy_context: PolicyContextFor<'a, K>,
 }
 
-impl<'a, K> NetworkContext<'a, K>
+impl<'a, K> NetworkService<'a, K>
 where
-    K: Kernel + NetworkService,
+    K: Kernel + HasNetworkBackend,
 {
     pub fn new(kernel: &'a K, policy_context: PolicyContextFor<'a, K>) -> Self {
         Self {
@@ -75,7 +63,7 @@ where
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        granted.execute(self.kernel.network_access()).await
+        granted.execute(self.kernel.network_backend()).await
     }
 }
 
@@ -110,10 +98,6 @@ mod tests {
 
     #[async_trait]
     impl ToolContext<TestKernel> for UnusedToolContext<'_> {
-        fn kernel(&self) -> &TestKernel {
-            self.kernel
-        }
-
         fn policy_context(&self) -> KernelPolicyContext<'_> {
             KernelPolicyContext::new(self.effective_capabilities, &self.workspace_root)
         }
@@ -140,21 +124,27 @@ mod tests {
         }
     }
 
+    impl HasNetworkService<TestKernel> for UnusedToolContext<'_> {
+        fn network(&self) -> NetworkService<'_, TestKernel> {
+            NetworkService::new(self.kernel, self.policy_context())
+        }
+    }
+
     struct TestKernel {
-        network: StaticNetwork,
+        network: StaticNetworkBackend,
         policy: PolicyPlane<KernelPolicyContextFactory>,
     }
 
     impl TestKernel {
-        fn new(network: StaticNetwork) -> Self {
+        fn new(network: StaticNetworkBackend) -> Self {
             let mut policy = PolicyPlane::new();
             policy.prepend_inbound(CapabilityEnvelopePolicy);
             Self { network, policy }
         }
     }
 
-    impl NetworkService for TestKernel {
-        fn network_access(&self) -> &dyn NetworkAccess {
+    impl HasNetworkBackend for TestKernel {
+        fn network_backend(&self) -> &dyn NetworkBackend {
             &self.network
         }
     }
@@ -205,8 +195,10 @@ mod tests {
     #[tokio::test]
     async fn url_fetch_grant_fetches_exact_url() {
         let ws = TempWorkspace::new();
-        let network =
-            StaticNetwork::new([("https://example.test/hello".to_owned(), b"hello".to_vec())]);
+        let network = StaticNetworkBackend::new([(
+            "https://example.test/hello".to_owned(),
+            b"hello".to_vec(),
+        )]);
         let mut kernel = TestKernel::new(network);
         kernel
             .policy
@@ -234,7 +226,7 @@ mod tests {
     #[tokio::test]
     async fn domain_policy_allows_matching_subdomain() {
         let ws = TempWorkspace::new();
-        let network = StaticNetwork::new([(
+        let network = StaticNetworkBackend::new([(
             "https://docs.example.test/index".to_owned(),
             b"docs".to_vec(),
         )]);
@@ -263,7 +255,7 @@ mod tests {
     #[tokio::test]
     async fn network_requires_matching_policy() {
         let ws = TempWorkspace::new();
-        let network = StaticNetwork::new([]);
+        let network = StaticNetworkBackend::new([]);
         let kernel = TestKernel::new(network);
         let registration = registration(Capabilities::empty());
         let params = InvocationParams::new(&ws.root, None);

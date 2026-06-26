@@ -4,44 +4,32 @@ use crate::policy::{PolicyContextFactory, PolicyEngine};
 use crate::tool::ToolContext;
 use std::path::Path;
 
-pub mod access;
 pub mod action;
+pub mod backend;
 pub mod policy;
 
-pub use access::{FsAccess, StdFs};
 pub use action::{
     CanonicalPath, CanonicalPrefix, CanonicalRoot, FsAction, FsReadAction, FsWriteAction,
 };
+pub use backend::{FsBackend, StdFsBackend};
 pub use policy::{
     AllowExactFileReadPolicy, AllowExactFileWritePolicy, AllowFileReadPrefixPolicy,
     AllowFileWritePrefixPolicy, AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy,
     AllowWorkspaceWritePolicy,
 };
 
-pub trait FsService {
-    fn fs_access(&self) -> &dyn FsAccess;
+pub trait HasFsBackend {
+    fn fs_backend(&self) -> &dyn FsBackend;
 }
 
-pub trait FsToolContextExt<K>: ToolContext<K>
+pub trait HasFsService<K>: ToolContext<K>
 where
-    K: FsService + Kernel,
+    K: HasFsBackend + Kernel,
 {
-    fn fs(&self) -> FsContext<'_, K>
-    where
-        Self: Sized,
-    {
-        FsContext::new(self.kernel(), self.workspace_root(), self.policy_context())
-    }
+    fn fs(&self) -> FsService<'_, K>;
 }
 
-impl<K, T> FsToolContextExt<K> for T
-where
-    T: ToolContext<K>,
-    K: FsService + Kernel,
-{
-}
-
-/// Filesystem sub-context exposed as `ctx.fs()`.
+/// Filesystem service facade exposed as `ctx.fs()`.
 ///
 /// Public methods remain natural and function-like. Internally they follow the
 /// same pipeline: construct an action, ask policy to grant it, then execute the
@@ -49,18 +37,18 @@ where
 type PolicyContextFor<'a, K> =
     <<K as Kernel>::PolicyCxFactory as PolicyContextFactory>::Context<'a>;
 
-pub struct FsContext<'a, K>
+pub struct FsService<'a, K>
 where
-    K: Kernel + FsService + ?Sized,
+    K: Kernel + HasFsBackend + ?Sized,
 {
     kernel: &'a K,
     workspace_root: CanonicalRoot,
     policy_context: PolicyContextFor<'a, K>,
 }
 
-impl<'a, K> FsContext<'a, K>
+impl<'a, K> FsService<'a, K>
 where
-    K: Kernel + FsService,
+    K: Kernel + HasFsBackend,
 {
     pub fn new(
         kernel: &'a K,
@@ -96,7 +84,7 @@ where
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        granted.execute(self.kernel.fs_access()).await
+        granted.execute(self.kernel.fs_backend()).await
     }
 
     pub async fn write_file(&self, path: &str, content: &str) -> Result<(), ExecutionError> {
@@ -119,7 +107,7 @@ where
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        granted.execute(self.kernel.fs_access()).await
+        granted.execute(self.kernel.fs_backend()).await
     }
 }
 
@@ -146,10 +134,6 @@ mod tests {
 
     #[async_trait]
     impl ToolContext<TestKernel> for UnusedToolContext<'_> {
-        fn kernel(&self) -> &TestKernel {
-            self.kernel
-        }
-
         fn policy_context(&self) -> KernelPolicyContext<'_> {
             KernelPolicyContext::new(self.effective_capabilities, &self.workspace_root)
         }
@@ -176,8 +160,14 @@ mod tests {
         }
     }
 
+    impl HasFsService<TestKernel> for UnusedToolContext<'_> {
+        fn fs(&self) -> FsService<'_, TestKernel> {
+            FsService::new(self.kernel, self.workspace_root(), self.policy_context())
+        }
+    }
+
     struct TestKernel {
-        fs: StdFs,
+        fs: StdFsBackend,
         policy: PolicyPlane<KernelPolicyContextFactory>,
     }
 
@@ -187,14 +177,14 @@ mod tests {
             policy.prepend_inbound(CapabilityEnvelopePolicy);
             policy.append::<FsAction, _>(AllowWorkspaceFsPolicy);
             Self {
-                fs: StdFs::new(),
+                fs: StdFsBackend::new(),
                 policy,
             }
         }
     }
 
-    impl FsService for TestKernel {
-        fn fs_access(&self) -> &dyn FsAccess {
+    impl HasFsBackend for TestKernel {
+        fn fs_backend(&self) -> &dyn FsBackend {
             &self.fs
         }
     }
