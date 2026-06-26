@@ -1,6 +1,6 @@
 use crate::error::ExecutionError;
-use crate::kernel::Kernel;
-use crate::policy::{PolicyContextFactory, PolicyEngine};
+use crate::kernel::{Kernel, PolicyContextFor};
+use crate::policy::PolicyEngine;
 use crate::tool::ToolContext;
 use std::path::Path;
 
@@ -34,9 +34,6 @@ where
 /// Public methods remain natural and function-like. Internally they follow the
 /// same pipeline: construct an action, ask policy to grant it, then execute the
 /// granted action. Grant / execute audit stays in the shared policy/action core.
-type PolicyContextFor<'a, K> =
-    <<K as Kernel>::PolicyCxFactory as PolicyContextFactory>::Context<'a>;
-
 pub struct FsService<'a, K>
 where
     K: Kernel + HasFsBackend + ?Sized,

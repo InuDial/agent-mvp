@@ -14,6 +14,9 @@ use crate::{
     tool::ToolContext,
 };
 
+pub type PolicyContextFor<'a, K> =
+    <<K as Kernel>::PolicyCxFactory as PolicyContextFactory>::Context<'a>;
+
 #[async_trait]
 pub trait Kernel: Sync {
     type PolicyCxFactory: PolicyContextFactory;
