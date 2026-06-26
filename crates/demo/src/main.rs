@@ -61,8 +61,21 @@ async fn main() {
         .await
         .unwrap();
 
+    let read_outcome_err = plane
+        .invoke(
+            "double".into(),
+            &write_params,
+            json!({
+                "name": "read_file",
+                "payload":{ "path": "hello.txt" },
+            }),
+        )
+        .await
+        .unwrap_err();
+
     println!("write_outcome:\n{write_outcome:#?}");
     println!("read_outcome:\n{read_outcome:#?}");
+    println!("read_err:\n{read_outcome_err:#?}");
 
     std::fs::remove_dir_all(root).unwrap();
 }
