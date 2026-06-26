@@ -1,8 +1,10 @@
-use tracing::{Span, info, info_span, warn};
+use tracing::{Span, debug, info, info_span, warn};
 
 use crate::action::AuditResource;
 use crate::error::ExecutionError;
-use crate::policy::{GrantDecision, GrantRecord, GrantSource};
+use crate::policy::{
+    GrantDecision, GrantRecord, GrantSource, PolicyDecision, PolicyGrant, PolicyId,
+};
 use crate::tool::{GrantId, ToolRegistration};
 use mvp_contract::Capabilities;
 
@@ -132,6 +134,36 @@ pub(crate) fn record_grant(record: &GrantRecord) {
         policy_name = ?policy_name,
         policy_id = ?policy_id,
         reason = ?record.reason(),
+    );
+}
+
+pub(crate) fn record_policy_grant(
+    action_kind: &str,
+    resource: &AuditResource,
+    policy_name: &'static str,
+    policy_id: PolicyId,
+    policy_stage: &'static str,
+    policy_grant: &PolicyGrant,
+) {
+    let decision = match policy_grant.decision() {
+        PolicyDecision::Allow => "allow",
+        PolicyDecision::Deny => "deny",
+        PolicyDecision::Abstain => "abstain",
+    };
+    let (resource_kind, resource_value) = serialize_resource(resource);
+
+    debug!(
+        target: AUDIT_TARGET,
+        event = "policy_grant",
+        action = action_kind,
+        resource_kind = resource_kind,
+        resource = %resource_value,
+        policy_name = policy_name,
+        policy_id = policy_id,
+        policy_stage = policy_stage,
+        decision = decision,
+        reason = ?policy_grant.reason(),
+        predicate = ?policy_grant.predicate(),
     );
 }
 

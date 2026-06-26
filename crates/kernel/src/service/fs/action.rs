@@ -4,19 +4,112 @@ use mvp_contract::{Capabilities, Capability};
 
 use crate::action::{Action, AuditResource};
 use crate::error::AuthorizationError;
+use crate::policy::Granted;
 
 #[derive(Clone, Debug)]
 pub struct CanonicalPath {
     path: PathBuf,
 }
 
+#[derive(Clone, Debug)]
+pub struct CanonicalRoot {
+    path: CanonicalPath,
+}
+
+#[derive(Clone, Debug)]
+pub struct CanonicalPrefix {
+    path: CanonicalPath,
+}
+
 impl CanonicalPath {
-    pub(crate) fn new(path: PathBuf) -> Self {
+    fn from_canonical(path: PathBuf) -> Self {
         Self { path }
+    }
+
+    pub(crate) fn existing(path: impl AsRef<Path>) -> Result<Self, AuthorizationError> {
+        let canonical = std::fs::canonicalize(path).map_err(AuthorizationError::Io)?;
+        Ok(Self::from_canonical(canonical))
+    }
+
+    pub(crate) fn existing_or_parent(path: impl AsRef<Path>) -> Result<Self, AuthorizationError> {
+        let path = path.as_ref();
+        if path.exists() {
+            return Self::existing(path);
+        }
+
+        let file_name = path.file_name().ok_or_else(|| {
+            AuthorizationError::Denied("write target must include a file name".into())
+        })?;
+        let parent = path.parent().ok_or_else(|| {
+            AuthorizationError::Denied(
+                "write target must have an authorized parent directory".into(),
+            )
+        })?;
+        let canonical_parent = std::fs::canonicalize(parent).map_err(AuthorizationError::Io)?;
+
+        Ok(Self::from_canonical(canonical_parent.join(file_name)))
     }
 
     pub fn as_path(&self) -> &Path {
         &self.path
+    }
+}
+
+impl CanonicalRoot {
+    pub fn existing(path: impl AsRef<Path>) -> Result<Self, AuthorizationError> {
+        Ok(Self {
+            path: CanonicalPath::existing(path)?,
+        })
+    }
+
+    pub fn contains(&self, path: &CanonicalPath) -> bool {
+        path.as_path().starts_with(self.as_path())
+    }
+
+    pub fn as_path(&self) -> &Path {
+        self.path.as_path()
+    }
+}
+
+impl CanonicalPrefix {
+    pub fn existing(path: impl AsRef<Path>) -> Result<Self, AuthorizationError> {
+        Ok(Self {
+            path: CanonicalPath::existing(path)?,
+        })
+    }
+
+    pub fn contains(&self, path: &CanonicalPath) -> bool {
+        path.as_path().starts_with(self.as_path())
+    }
+
+    pub fn as_path(&self) -> &Path {
+        self.path.as_path()
+    }
+}
+
+/// The parent action of all fs actions
+#[derive(Clone, Debug)]
+pub struct FsAction {
+    pub(crate) path: CanonicalPath,
+}
+
+impl FsAction {
+    pub fn new(path: CanonicalPath) -> Self {
+        Self { path }
+    }
+}
+
+impl Action for FsAction {
+    fn capabilities(&self) -> Capabilities {
+        Capabilities::empty()
+    }
+
+    fn audit_kind(&self) -> &'static str {
+        "fs"
+    }
+
+    fn audit_resource(&self) -> AuditResource {
+        AuditResource::Path(self.path.as_path().to_path_buf())
     }
 }
 
@@ -26,8 +119,10 @@ pub struct FsReadAction {
 }
 
 impl FsReadAction {
-    pub(crate) fn new(path: CanonicalPath) -> Self {
-        Self { path }
+    pub(crate) fn new(parent: Granted<FsAction>) -> Self {
+        Self {
+            path: parent.action.path,
+        }
     }
 }
 
@@ -52,8 +147,11 @@ pub struct FsWriteAction {
 }
 
 impl FsWriteAction {
-    pub(crate) fn new(path: CanonicalPath, content: String) -> Self {
-        Self { path, content }
+    pub(crate) fn new(parent: Granted<FsAction>, content: String) -> Self {
+        Self {
+            path: parent.action.path,
+            content,
+        }
     }
 }
 
@@ -72,44 +170,34 @@ impl Action for FsWriteAction {
 }
 
 pub(crate) fn resolve_under_authorization(
-    root: &Path,
+    root: &CanonicalRoot,
     path: &Path,
 ) -> Result<CanonicalPath, AuthorizationError> {
-    let requested = candidate_path(root, path);
-    let canonical = std::fs::canonicalize(requested).map_err(AuthorizationError::Io)?;
+    let requested = candidate_path(root.as_path(), path);
+    let canonical = CanonicalPath::existing(requested)?;
 
     ensure_under_root(root, &canonical)?;
 
-    Ok(CanonicalPath::new(canonical))
+    Ok(canonical)
 }
 
 pub(crate) fn resolve_write_under_authorization(
-    root: &Path,
+    root: &CanonicalRoot,
     path: &Path,
 ) -> Result<CanonicalPath, AuthorizationError> {
-    let requested = candidate_path(root, path);
+    let requested = candidate_path(root.as_path(), path);
+    let canonical = CanonicalPath::existing_or_parent(requested)?;
 
-    if requested.exists() {
-        let canonical = std::fs::canonicalize(requested).map_err(AuthorizationError::Io)?;
-        ensure_under_root(root, &canonical)?;
-        return Ok(CanonicalPath::new(canonical));
-    }
+    ensure_under_root(root, &canonical)?;
 
-    let file_name = requested.file_name().ok_or_else(|| {
-        AuthorizationError::Denied("write target must include a file name".into())
-    })?;
-    let parent = requested.parent().ok_or_else(|| {
-        AuthorizationError::Denied("write target must have an authorized parent directory".into())
-    })?;
-    let canonical_parent = std::fs::canonicalize(parent).map_err(AuthorizationError::Io)?;
-
-    ensure_under_root(root, &canonical_parent)?;
-
-    Ok(CanonicalPath::new(canonical_parent.join(file_name)))
+    Ok(canonical)
 }
 
-fn ensure_under_root(root: &Path, candidate: &Path) -> Result<(), AuthorizationError> {
-    if candidate.starts_with(root) {
+fn ensure_under_root(
+    root: &CanonicalRoot,
+    candidate: &CanonicalPath,
+) -> Result<(), AuthorizationError> {
+    if root.contains(candidate) {
         Ok(())
     } else {
         Err(AuthorizationError::OutsideWorkspace)

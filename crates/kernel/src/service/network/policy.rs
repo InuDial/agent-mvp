@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::policy::{Policy, PolicyContextFactory, PolicyDecision};
+use crate::policy::{Policy, PolicyContextFactory, PolicyGrant};
 
 use super::action::NetworkFetchAction;
 
@@ -24,11 +24,15 @@ where
         "network.allow_exact_url_fetch"
     }
 
-    async fn grant(&self, _ctx: &F::Context<'_>, action: &NetworkFetchAction) -> PolicyDecision {
+    async fn grant(&self, _ctx: &F::Context<'_>, action: &NetworkFetchAction) -> PolicyGrant {
+        let predicate = format!("url == allowed_url: {} == {}", action.url, self.url);
+
         if action.url == self.url {
-            PolicyDecision::Allow { reason: None }
+            PolicyGrant::allow(Some("URL matches exact allowed URL".into()))
+                .with_predicate(predicate)
         } else {
-            PolicyDecision::Abstain
+            PolicyGrant::abstain(Some("URL does not match exact allowed URL".into()))
+                .with_predicate(predicate)
         }
     }
 }
@@ -55,12 +59,26 @@ where
         "network.allow_domain_fetch"
     }
 
-    async fn grant(&self, _ctx: &F::Context<'_>, action: &NetworkFetchAction) -> PolicyDecision {
-        match super::extract_host(&action.url) {
+    async fn grant(&self, _ctx: &F::Context<'_>, action: &NetworkFetchAction) -> PolicyGrant {
+        let host = super::extract_host(&action.url);
+        let predicate = match host.as_deref() {
+            Some(host) => format!(
+                "host == domain || host ends_with .domain: {} == {} || {} ends_with .{}",
+                host, self.domain, host, self.domain
+            ),
+            None => format!(
+                "host == domain || host ends_with .domain: <none> == {} || <none> ends_with .{}",
+                self.domain, self.domain
+            ),
+        };
+
+        match host {
             Some(host) if host == self.domain || host.ends_with(&format!(".{}", self.domain)) => {
-                PolicyDecision::Allow { reason: None }
+                PolicyGrant::allow(Some("URL host is under allowed domain".into()))
+                    .with_predicate(predicate)
             }
-            _ => PolicyDecision::Abstain,
+            _ => PolicyGrant::abstain(Some("URL host is outside allowed domain".into()))
+                .with_predicate(predicate),
         }
     }
 }

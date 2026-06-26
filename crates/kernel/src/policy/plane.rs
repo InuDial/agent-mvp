@@ -9,7 +9,8 @@ use crate::tool::next_grant_id;
 use crate::{audit, policy::PolicyContextFactory};
 
 use super::{
-    GrantRecord, Granted, Policy, PolicyAny, PolicyContext, PolicyDecision, PolicyEngine, PolicyId,
+    GrantRecord, Granted, Policy, PolicyAny, PolicyContext, PolicyDecision, PolicyEngine,
+    PolicyGrant, PolicyId,
 };
 
 type SyncAnyMap = AnyMap<dyn AnyMapAny + Send + Sync>;
@@ -44,11 +45,15 @@ where
         self.inner.name()
     }
 
-    async fn grant(&self, ctx: &F::Context<'_>, action: &dyn Action) -> PolicyDecision {
+    async fn grant(&self, ctx: &F::Context<'_>, action: &dyn Action) -> PolicyGrant {
         let action_any = action as &dyn Any;
         match action_any.downcast_ref::<A>() {
             Some(action) => self.inner.grant(ctx, action).await,
-            None => PolicyDecision::Abstain,
+            None => PolicyGrant::abstain(Some("policy does not apply to this action type".into()))
+                .with_predicate(format!(
+                    "action downcasts to policy action type: {}",
+                    std::any::type_name::<A>()
+                )),
         }
     }
 }
@@ -79,13 +84,21 @@ where
         "policy.capability_envelope"
     }
 
-    async fn grant(&self, ctx: &F::Context<'_>, action: &dyn Action) -> PolicyDecision {
+    async fn grant(&self, ctx: &F::Context<'_>, action: &dyn Action) -> PolicyGrant {
         if ctx.capabilities().contains(action.capabilities()) {
-            PolicyDecision::Abstain
+            PolicyGrant::abstain(Some("action is within declared capability envelope".into()))
+                .with_predicate(format!(
+                    "effective_capabilities contains action_capabilities: {} contains {}",
+                    ctx.capabilities().bits(),
+                    action.capabilities().bits()
+                ))
         } else {
-            PolicyDecision::Deny {
-                reason: Some("action exceeds declared capability envelope".into()),
-            }
+            PolicyGrant::deny(Some("action exceeds declared capability envelope".into()))
+                .with_predicate(format!(
+                    "effective_capabilities contains action_capabilities: {} contains {}",
+                    ctx.capabilities().bits(),
+                    action.capabilities().bits()
+                ))
         }
     }
 }
@@ -99,8 +112,9 @@ impl<F: PolicyContextFactory> PolicyAny<F> for DefaultAllowPolicy {
         "policy.default_allow"
     }
 
-    async fn grant(&self, _ctx: &F::Context<'_>, _action: &dyn Action) -> PolicyDecision {
-        PolicyDecision::Allow { reason: None }
+    async fn grant(&self, _ctx: &F::Context<'_>, _action: &dyn Action) -> PolicyGrant {
+        PolicyGrant::allow(Some("default allow policy granted action".into()))
+            .with_predicate("default allow")
     }
 }
 
@@ -133,10 +147,19 @@ where
 
         async {
             for policy in &self.global_policies_inbound {
-                let decision = policy.inner.grant(ctx, &action).await;
+                let policy_grant = policy.inner.grant(ctx, &action).await;
+                audit::record_policy_grant(
+                    action_kind,
+                    &resource,
+                    policy.inner.name(),
+                    policy.id,
+                    "inbound",
+                    &policy_grant,
+                );
+                let (decision, reason) = policy_grant.into_decision_and_reason();
                 match decision {
-                    PolicyDecision::Allow { .. } | PolicyDecision::Abstain => {}
-                    PolicyDecision::Deny { reason } => {
+                    PolicyDecision::Allow | PolicyDecision::Abstain => {}
+                    PolicyDecision::Deny => {
                         let reason = reason.unwrap_or_else(|| "policy denied action".into());
                         let record = GrantRecord::deny_from_policy(
                             action_kind,
@@ -156,9 +179,18 @@ where
                 .get::<VecDeque<RegisteredPolicy<F, A>>>()
             {
                 for policy in entries {
-                    let decision = policy.inner.grant(ctx, &action).await;
+                    let policy_grant = policy.inner.grant(ctx, &action).await;
+                    audit::record_policy_grant(
+                        action_kind,
+                        &resource,
+                        policy.inner.name(),
+                        policy.id,
+                        "action",
+                        &policy_grant,
+                    );
+                    let (decision, reason) = policy_grant.into_decision_and_reason();
                     match decision {
-                        PolicyDecision::Allow { reason } => {
+                        PolicyDecision::Allow => {
                             let grant_id = next_grant_id();
                             let record = GrantRecord::allow(
                                 grant_id,
@@ -171,7 +203,7 @@ where
                             audit::record_grant(&record);
                             return Ok(Granted { grant_id, action });
                         }
-                        PolicyDecision::Deny { reason } => {
+                        PolicyDecision::Deny => {
                             let reason = reason.unwrap_or_else(|| "policy denied action".into());
                             let record = GrantRecord::deny_from_policy(
                                 action_kind,
@@ -189,9 +221,18 @@ where
             }
 
             for policy in &self.global_policies_outbound {
-                let decision = policy.inner.grant(ctx, &action).await;
+                let policy_grant = policy.inner.grant(ctx, &action).await;
+                audit::record_policy_grant(
+                    action_kind,
+                    &resource,
+                    policy.inner.name(),
+                    policy.id,
+                    "outbound",
+                    &policy_grant,
+                );
+                let (decision, reason) = policy_grant.into_decision_and_reason();
                 match decision {
-                    PolicyDecision::Allow { reason } => {
+                    PolicyDecision::Allow => {
                         let grant_id = next_grant_id();
                         let record = GrantRecord::allow(
                             grant_id,
@@ -204,7 +245,7 @@ where
                         audit::record_grant(&record);
                         return Ok(Granted { grant_id, action });
                     }
-                    PolicyDecision::Deny { reason } => {
+                    PolicyDecision::Deny => {
                         let reason = reason.unwrap_or_else(|| "policy denied action".into());
                         let record = GrantRecord::deny_from_policy(
                             action_kind,

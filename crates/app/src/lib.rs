@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use async_trait::async_trait;
 use mvp_contract::{Capabilities, InvocationParams, ToolName, ToolOutcome};
@@ -13,7 +13,7 @@ use mvp_kernel::{
         CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
     },
     service::{
-        fs::{FsAccess, FsService},
+        fs::{AllowWorkspaceFsPolicy, CanonicalRoot, FsAccess, FsAction, FsService},
         network::{NetworkAccess, NetworkService},
     },
     tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
@@ -31,6 +31,7 @@ impl App {
     pub fn new() -> Self {
         let mut policy = PolicyPlane::new();
         policy.prepend_inbound(CapabilityEnvelopePolicy);
+        policy.append::<FsAction, _>(AllowWorkspaceFsPolicy);
 
         Self {
             tools: BTreeMap::new(),
@@ -67,7 +68,7 @@ pub struct AppToolContext<'a> {
     app: &'a App,
     registration: &'a ToolRegistration,
     effective_capabilities: Capabilities,
-    canonical_workspace_root: PathBuf,
+    canonical_workspace_root: CanonicalRoot,
 }
 
 impl<'a> AppToolContext<'a> {
@@ -76,8 +77,7 @@ impl<'a> AppToolContext<'a> {
         registration: &'a ToolRegistration,
         params: &'a InvocationParams,
     ) -> Result<Self, AuthorizationError> {
-        let canonical_workspace_root =
-            std::fs::canonicalize(&params.workspace_root).map_err(AuthorizationError::Io)?;
+        let canonical_workspace_root = CanonicalRoot::existing(&params.workspace_root)?;
         let declared_capabilities = registration.spec().capabilities;
         let effective_capabilities = match params.capabilities_override {
             Some(caps) => caps,
@@ -100,7 +100,7 @@ impl ToolContext<App> for AppToolContext<'_> {
     }
 
     fn policy_context(&self) -> KernelPolicyContext<'_> {
-        KernelPolicyContext::new(self.effective_capabilities, self.workspace_root())
+        KernelPolicyContext::new(self.effective_capabilities, &self.canonical_workspace_root)
     }
 
     fn effective_capabilities(&self) -> Capabilities {
@@ -110,7 +110,7 @@ impl ToolContext<App> for AppToolContext<'_> {
         self.registration
     }
     fn workspace_root(&self) -> &Path {
-        &self.canonical_workspace_root
+        self.canonical_workspace_root.as_path()
     }
 
     async fn invoke_tool(
@@ -184,6 +184,7 @@ impl Kernel for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 

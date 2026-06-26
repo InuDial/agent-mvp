@@ -1,5 +1,7 @@
 use crate::kernel::Kernel;
-use crate::service::fs::{FsAccess, FsService, StdFs};
+use crate::service::fs::{
+    AllowWorkspaceFsPolicy, CanonicalRoot, FsAccess, FsAction, FsService, StdFs,
+};
 use crate::service::network::{NetworkAccess, NetworkService, StaticNetwork};
 use crate::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
 use crate::{
@@ -71,6 +73,7 @@ impl MockKernel {
     pub fn new() -> Self {
         let mut policy = PolicyPlane::new();
         policy.prepend_inbound(CapabilityEnvelopePolicy);
+        policy.append::<FsAction, _>(AllowWorkspaceFsPolicy);
 
         Self {
             tools: BTreeMap::new(),
@@ -120,7 +123,7 @@ pub struct MockToolContext<'a> {
     kernel: &'a MockKernel,
     registration: &'a ToolRegistration,
     effective_capabilities: Capabilities,
-    canonical_workspace_root: PathBuf,
+    canonical_workspace_root: CanonicalRoot,
 }
 
 impl<'a> MockToolContext<'a> {
@@ -129,8 +132,7 @@ impl<'a> MockToolContext<'a> {
         registration: &'a ToolRegistration,
         params: &'a InvocationParams,
     ) -> Result<Self, AuthorizationError> {
-        let canonical_workspace_root =
-            std::fs::canonicalize(&params.workspace_root).map_err(AuthorizationError::Io)?;
+        let canonical_workspace_root = CanonicalRoot::existing(&params.workspace_root)?;
         let declared_capabilities = registration.spec().capabilities;
         let effective_capabilities = match params.capabilities_override {
             Some(caps) => caps,
@@ -153,7 +155,7 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
     }
 
     fn policy_context(&self) -> KernelPolicyContext<'_> {
-        KernelPolicyContext::new(self.effective_capabilities, self.workspace_root())
+        KernelPolicyContext::new(self.effective_capabilities, &self.canonical_workspace_root)
     }
 
     fn effective_capabilities(&self) -> Capabilities {
@@ -165,7 +167,7 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
     }
 
     fn workspace_root(&self) -> &Path {
-        &self.canonical_workspace_root
+        self.canonical_workspace_root.as_path()
     }
 
     async fn invoke_tool(

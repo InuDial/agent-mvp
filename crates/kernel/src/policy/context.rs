@@ -1,6 +1,6 @@
-use std::path::Path;
-
 use mvp_contract::Capabilities;
+
+use crate::service::fs::CanonicalRoot;
 
 pub trait PolicyContext: Send + Sync {
     fn capabilities(&self) -> &Capabilities;
@@ -12,16 +12,16 @@ pub trait PolicyContextFactory: 'static {
 }
 
 pub trait WorkspacePolicyContext: PolicyContext {
-    fn workspace_root(&self) -> &Path;
+    fn workspace_root(&self) -> &CanonicalRoot;
 }
 
 pub struct KernelPolicyContext<'a> {
     capabilities: Capabilities,
-    workspace_root: &'a Path,
+    workspace_root: &'a CanonicalRoot,
 }
 
 impl<'a> KernelPolicyContext<'a> {
-    pub fn new(capabilities: Capabilities, workspace_root: &'a Path) -> Self {
+    pub fn new(capabilities: Capabilities, workspace_root: &'a CanonicalRoot) -> Self {
         Self {
             capabilities,
             workspace_root,
@@ -36,7 +36,7 @@ impl PolicyContext for KernelPolicyContext<'_> {
 }
 
 impl WorkspacePolicyContext for KernelPolicyContext<'_> {
-    fn workspace_root(&self) -> &Path {
+    fn workspace_root(&self) -> &CanonicalRoot {
         self.workspace_root
     }
 }

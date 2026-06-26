@@ -89,6 +89,7 @@ mod tests {
     use crate::policy::{
         CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
     };
+    use crate::service::fs::CanonicalRoot;
     use crate::test_utils::{TempWorkspace, registration};
     use crate::tool::ToolContext;
     use async_trait::async_trait;
@@ -99,7 +100,7 @@ mod tests {
         kernel: &'a TestKernel,
         registration: &'a crate::tool::ToolRegistration,
         effective_capabilities: Capabilities,
-        workspace_root: std::path::PathBuf,
+        workspace_root: CanonicalRoot,
     }
 
     #[async_trait]
@@ -109,7 +110,7 @@ mod tests {
         }
 
         fn policy_context(&self) -> KernelPolicyContext<'_> {
-            KernelPolicyContext::new(self.effective_capabilities, self.workspace_root())
+            KernelPolicyContext::new(self.effective_capabilities, &self.workspace_root)
         }
 
         fn registration(&self) -> &crate::tool::ToolRegistration {
@@ -121,7 +122,7 @@ mod tests {
         }
 
         fn workspace_root(&self) -> &std::path::Path {
-            &self.workspace_root
+            self.workspace_root.as_path()
         }
 
         async fn invoke_tool(
@@ -192,7 +193,7 @@ mod tests {
             kernel,
             registration,
             effective_capabilities,
-            workspace_root: std::fs::canonicalize(&params.workspace_root).unwrap(),
+            workspace_root: CanonicalRoot::existing(&params.workspace_root).unwrap(),
         }
     }
 

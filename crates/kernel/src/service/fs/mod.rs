@@ -9,10 +9,13 @@ pub mod action;
 pub mod policy;
 
 pub use access::{FsAccess, StdFs};
-pub use action::{CanonicalPath, FsReadAction, FsWriteAction};
+pub use action::{
+    CanonicalPath, CanonicalPrefix, CanonicalRoot, FsAction, FsReadAction, FsWriteAction,
+};
 pub use policy::{
     AllowExactFileReadPolicy, AllowExactFileWritePolicy, AllowFileReadPrefixPolicy,
-    AllowFileWritePrefixPolicy, AllowWorkspaceReadPolicy, AllowWorkspaceWritePolicy,
+    AllowFileWritePrefixPolicy, AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy,
+    AllowWorkspaceWritePolicy,
 };
 
 pub trait FsService {
@@ -51,7 +54,7 @@ where
     K: Kernel + FsService + ?Sized,
 {
     kernel: &'a K,
-    workspace_root: &'a Path,
+    workspace_root: CanonicalRoot,
     policy_context: PolicyContextFor<'a, K>,
 }
 
@@ -64,6 +67,8 @@ where
         workspace_root: &'a Path,
         policy_context: PolicyContextFor<'a, K>,
     ) -> Self {
+        let workspace_root = CanonicalRoot::existing(workspace_root)
+            .expect("tool context workspace root is canonical");
         Self {
             kernel,
             workspace_root,
@@ -72,9 +77,18 @@ where
     }
 
     pub async fn read_file(&self, path: &str) -> Result<String, ExecutionError> {
-        let path = action::resolve_under_authorization(self.workspace_root, Path::new(path))
+        let path = action::resolve_under_authorization(&self.workspace_root, Path::new(path))
             .map_err(ExecutionError::Authorization)?;
-        let action = FsReadAction::new(path);
+
+        let parent = FsAction::new(path);
+        let granted = self
+            .kernel
+            .policy_plane()
+            .grant(&self.policy_context, parent)
+            .await
+            .map_err(ExecutionError::Authorization)?;
+
+        let action = FsReadAction::new(granted);
         let granted = self
             .kernel
             .policy_plane()
@@ -86,9 +100,18 @@ where
     }
 
     pub async fn write_file(&self, path: &str, content: &str) -> Result<(), ExecutionError> {
-        let path = action::resolve_write_under_authorization(self.workspace_root, Path::new(path))
+        let path = action::resolve_write_under_authorization(&self.workspace_root, Path::new(path))
             .map_err(ExecutionError::Authorization)?;
-        let action = FsWriteAction::new(path, content.to_owned());
+
+        let parent = FsAction::new(path);
+        let granted = self
+            .kernel
+            .policy_plane()
+            .grant(&self.policy_context, parent)
+            .await
+            .map_err(ExecutionError::Authorization)?;
+
+        let action = FsWriteAction::new(granted, content.to_owned());
         let granted = self
             .kernel
             .policy_plane()
@@ -118,7 +141,7 @@ mod tests {
         kernel: &'a TestKernel,
         registration: &'a crate::tool::ToolRegistration,
         effective_capabilities: Capabilities,
-        workspace_root: std::path::PathBuf,
+        workspace_root: CanonicalRoot,
     }
 
     #[async_trait]
@@ -128,7 +151,7 @@ mod tests {
         }
 
         fn policy_context(&self) -> KernelPolicyContext<'_> {
-            KernelPolicyContext::new(self.effective_capabilities, self.workspace_root())
+            KernelPolicyContext::new(self.effective_capabilities, &self.workspace_root)
         }
 
         fn effective_capabilities(&self) -> Capabilities {
@@ -140,7 +163,7 @@ mod tests {
         }
 
         fn workspace_root(&self) -> &Path {
-            &self.workspace_root
+            self.workspace_root.as_path()
         }
 
         async fn invoke_tool(
@@ -162,6 +185,7 @@ mod tests {
         fn new() -> Self {
             let mut policy = PolicyPlane::new();
             policy.prepend_inbound(CapabilityEnvelopePolicy);
+            policy.append::<FsAction, _>(AllowWorkspaceFsPolicy);
             Self {
                 fs: StdFs::new(),
                 policy,
@@ -214,7 +238,7 @@ mod tests {
             kernel,
             registration,
             effective_capabilities,
-            workspace_root: std::fs::canonicalize(&params.workspace_root).unwrap(),
+            workspace_root: CanonicalRoot::existing(&params.workspace_root).unwrap(),
         }
     }
 
@@ -362,6 +386,29 @@ mod tests {
             denied,
             Err(ExecutionError::Authorization(AuthorizationError::Denied(_)))
         ));
+    }
+
+    #[tokio::test]
+    async fn exact_file_write_policy_normalizes_missing_target_parent() {
+        let ws = TempWorkspace::new();
+        let requested_target = ws.root.join("created.txt");
+
+        let mut kernel = TestKernel::new();
+        kernel
+            .policy
+            .append::<FsWriteAction, _>(AllowExactFileWritePolicy::new(&requested_target));
+        let registration = registration([Capability::FsWrite].into());
+        let params = InvocationParams::new(&ws.root, None);
+        let ctx = tool_ctx(
+            &kernel,
+            &registration,
+            &params,
+            [Capability::FsWrite].into(),
+            &ws.root,
+        );
+
+        ctx.fs().write_file("created.txt", "ok").await.unwrap();
+        assert_eq!(std::fs::read_to_string(requested_target).unwrap(), "ok");
     }
 
     #[tokio::test]

@@ -4,7 +4,9 @@ use mvp_app::App;
 use mvp_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
 use mvp_contract::{Capability, InvocationParams};
 use mvp_kernel::kernel::Kernel;
-use mvp_kernel::service::fs::{AllowWorkspaceReadPolicy, AllowWorkspaceWritePolicy};
+use mvp_kernel::service::fs::{
+    AllowExactFileWritePolicy, AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy,
+};
 use serde_json::json;
 use tracing_subscriber::{EnvFilter, fmt};
 
@@ -12,7 +14,8 @@ use tracing_subscriber::{EnvFilter, fmt};
 async fn main() {
     fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("mvp::audit=info")),
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("mvp::audit=debug")),
         )
         .init();
 
@@ -27,15 +30,18 @@ async fn main() {
 
     std::fs::create_dir_all(&root).unwrap();
 
-    let mut plane = App::new();
-    plane.register(WriteFileTool).unwrap();
-    plane.register(ReadFileTool).unwrap();
-    plane.register(Double).unwrap();
-    plane.policy.append(AllowWorkspaceWritePolicy);
-    plane.policy.append(AllowWorkspaceReadPolicy);
+    let mut app = App::new();
+    app.register(WriteFileTool).unwrap();
+    app.register(ReadFileTool).unwrap();
+    app.register(Double).unwrap();
+    // Workspace FS can be default allowed
+    app.policy.append(AllowWorkspaceFsPolicy);
+    app.policy
+        .append(AllowExactFileWritePolicy::new(root.join("hello.txt")));
+    app.policy.append(AllowWorkspaceReadPolicy);
 
     let write_params = InvocationParams::new(&root, Some([Capability::FsWrite].into()));
-    let write_outcome = plane
+    let write_outcome = app
         .invoke(
             "write_file".into(),
             &write_params,
@@ -48,7 +54,7 @@ async fn main() {
         .unwrap();
 
     let read_params = InvocationParams::new(&root, Some([Capability::FsRead].into()));
-    let read_outcome = plane
+    let read_outcome = app
         .invoke(
             "double".into(),
             &read_params,
@@ -60,7 +66,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let read_outcome_err = plane
+    let read_outcome_err = app
         .invoke(
             "double".into(),
             &write_params,
