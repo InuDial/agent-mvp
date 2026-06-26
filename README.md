@@ -1,368 +1,203 @@
 # mvp
 
-A Rust MVP for a layered tool-execution kernel with explicit authorization, audit, and capability propagation.
+A Rust MVP for a layered tool-execution architecture with explicit capabilities,
+policy checks, service mediation, and audit records.
 
-This repository explores a runtime model for tools that need more structure than “call some function and hope it is safe”.
-The core idea is to separate:
+The project is intentionally small. Its main artifact is the runtime architecture:
+tools do not perform side effects directly; they request kernel-owned services,
+which turn requests into auditable actions and authorize them through policy.
 
-- tool protocol and metadata
-- kernel-owned execution and authorization
-- service access such as filesystem and network
-- built-in tools and demo usage
+## Architecture goals
 
-The current codebase is intentionally small, but the layering and safety-oriented design are the main point.
-
-## Goals
-
-This MVP is trying to validate a few ideas:
-
-- tools should run through a kernel-owned invocation pipeline
-- service access should be modeled as explicit actions, not ad-hoc direct calls
-- authorization should be layered and auditable
-- capability constraints should propagate across tool-to-tool invocation
-- nested invocation should be able to shrink authority, but not expand it
+- Keep protocol types separate from runtime execution.
+- Route all tool side effects through service facades.
+- Represent service operations as explicit `Action` values.
+- Evaluate coarse capabilities before resource-specific policy.
+- Preserve or reduce authority across nested tool calls, never expand it.
+- Emit audit records around invocation, authorization, and execution.
 
 ## Workspace layout
 
 ```text
-crates/contract   Shared protocol and capability types
-crates/kernel     Tool plane, policy plane, actions, audit, services
-crates/builtin    Built-in example tools
-crates/demo       Demo binary showing end-to-end usage
+crates/contract   Shared protocol, metadata, capabilities, invocation params
+crates/kernel     Kernel traits, tool context, actions, policy, services, audit
+crates/app        Concrete application kernel wiring tools, services, and policy
+crates/builtin    Example tools that exercise the architecture
+crates/demo       Small end-to-end executable
 ```
 
-### `crates/contract`
-
-Defines shared runtime-facing types such as:
-
-- `ToolRequest`
-- `ToolOutcome`
-- `ToolSpec`
-- `Capability`
-- `Capabilities`
-
-This crate is intentionally lightweight. It describes the protocol surface, not the execution model.
-
-### `crates/kernel`
-
-Owns the execution model and most of the design value in this repository.
-
-Main responsibilities:
-
-- tool registration and invocation
-- building per-call runtime context
-- capability scoping
-- policy evaluation
-- grant issuance
-- audit logging
-- service façades such as filesystem and network
-
-### `crates/builtin`
-
-Contains example tools that exercise the kernel pipeline.
-
-Current examples include:
-
-- `read_file`: reads a file through `ctx.fs()`
-- `write_file`: writes a file through `ctx.fs()`
-- `double`: invokes another tool twice to demonstrate nested invocation
-
-### `crates/demo`
-
-Shows how a host creates a `ToolPlane`, registers tools, installs policy, writes a file through `write_file`, and then reads it back through a nested `double -> read_file` invocation.
-
-## Layering
-
-The project is deliberately layered.
+## Core layers
 
 ```mermaid
 flowchart TD
-    Host[Host / caller] --> Contract[contract
-ToolRequest / ToolSpec / Capability]
-    Host --> Plane[kernel::ToolPlane]
-    Plane --> Ctx[ToolPlaneContext]
-    Ctx --> Service[Service facade
-fs / network]
+    Host[Host / caller] --> Contract[contract types]
+    Host --> App[app::App]
+    App --> Kernel[kernel traits]
+    Kernel --> Context[ToolContext]
+    Context --> Tool[ToolImpl]
+    Tool --> Service[Service facade]
     Service --> Action[Action]
     Action --> Policy[PolicyPlane]
     Policy --> Grant[Granted action]
     Grant --> Executor[Service executor]
-    Plane --> Builtin[builtin tools]
-    Builtin --> Ctx
+    Policy --> Audit[Audit records]
+    Kernel --> Audit
 ```
 
-A few design choices are important here:
+### `contract`
 
-1. **Tools do not directly own the runtime pipeline**  
-   User code implements `ToolImpl`, but the kernel controls registration, invocation, audit, and final authorization steps.
+`mvp-contract` defines the shared protocol surface:
 
-2. **Services are façades, not raw capabilities**  
-   A tool does not read files by directly touching `std::fs`. It goes through `ctx.fs()` and produces an explicit `Action`.
+- `ToolRequest`
+- `ToolOutcome`
+- `ToolSpec`
+- `Capability` / `Capabilities`
+- `InvocationParams`
 
-3. **Policy reasons about actions**  
-   Authorization is not attached to arbitrary function calls. It is attached to stable, auditable semantic units such as `fs.read` or `network.fetch`.
+This crate does not own execution. It only describes what can cross the runtime
+boundary.
 
-## Invocation flow
+### `kernel`
 
-At a high level, a call looks like this:
+`mvp-kernel` defines the reusable execution model:
 
-1. A host calls `ToolPlane::invoke(...)`
-2. The kernel looks up the target tool registration
-3. The kernel builds a `ToolPlaneContext`
-4. The context computes the current `effective_capabilities`
-5. The tool parses input and executes
-6. If the tool calls a service such as `ctx.fs().read_file(...)` or `ctx.fs().write_file(...)`, the service builds an `Action`
-7. The `PolicyPlane` evaluates authorization
-8. If granted, the action executes against the domain executor
-9. Audit records are emitted along the way
+- `Kernel` and `ToolContext` traits
+- tool registration and invocation adapters
+- `Action` and `Granted<Action>` authorization flow
+- inbound, typed, and outbound policy evaluation
+- filesystem and network service facades
+- structured audit helpers
 
-For nested tool calls:
+The kernel crate contains the design primitives, but not the concrete application
+state.
 
-1. A tool calls `ctx.invoke_tool(...)`
-2. The child invocation inherits the parent effective capabilities by default
-3. A tool may explicitly provide a smaller capability override for the child
-4. A tool may **not** expand authority beyond its current effective capabilities
+### `app`
 
-## Safety-oriented design efforts
+`mvp-app` is the concrete kernel implementation used by the demo and tests.
 
-This repository is not claiming to be a finished security system, but a lot of the design effort is aimed at making safety properties explicit.
+It wires together:
 
-### 1. Capability model: declared vs effective
+- registered tools
+- `StdFs`
+- `DenyNetwork`
+- `PolicyPlane`
+- `CapabilityEnvelopePolicy`
+- per-call `AppToolContext`
 
-A tool has declared capabilities in `ToolSpec`.
+This crate is where invocation parameters become an effective runtime context.
 
-Those declared capabilities are treated as the tool’s **default capability set**, not as a permanent hard upper bound.
+### `builtin`
 
-At runtime, what actually matters is the invocation’s **effective capabilities**. That effective envelope is carried by the kernel per invocation and then enforced by the policy plane during action authorization.
+`mvp-builtin` contains small tools that demonstrate the model:
 
-- top-level invocation with `None` override uses the tool’s declared capabilities as default
-- top-level invocation with `Some(capabilities)` runs under that explicit effective capability set
-- nested invocation with `None` inherits the parent effective capabilities
-- nested invocation with `Some(capabilities)` is allowed only if it is a subset of the parent effective capabilities
+- `read_file` uses `ctx.fs().read_file(...)`
+- `write_file` uses `ctx.fs().write_file(...)`
+- `double` performs nested tool invocation
 
-This matters because it allows wrapper/composition tools such as `double` to exist without forcing every possible delegated service capability into their static declaration.
+These tools are examples, not the architectural center of the repository.
 
-### 2. Capability non-expansion in nested calls
+## Invocation model
 
-One of the main safety properties currently enforced is:
+A top-level call enters through `Kernel::invoke`:
 
-> authority may be preserved or reduced across a nested call, but not expanded
+1. The application finds the registered tool.
+2. The application builds a `ToolContext`.
+3. The context computes effective capabilities for this invocation.
+4. The tool executes against the context.
+5. Service calls create explicit actions such as `fs.read` or `network.fetch`.
+6. The policy plane evaluates the action.
+7. A granted action executes through the service executor.
+8. Audit records describe the invocation, grant decision, and execution result.
 
-So a tool can:
+Nested calls use the same path through `ToolContext::invoke_tool`. By default,
+the child inherits the parent invocation's effective capabilities. A child call
+may receive a smaller override, but an override that expands authority is denied.
 
-- inherit its current authority to a child tool
-- deliberately shrink that authority for a child tool
+## Capability model
 
-But it cannot:
+`ToolSpec.capabilities` is a tool's declared default capability set. It is not
+the only authority source for every call.
 
-- mint new capabilities for a child tool that it does not currently possess
+The actual authorization envelope is the invocation's effective capabilities:
 
-This prevents nested invocation from becoming an authorization bypass.
+- top-level call without override uses the target tool's declared capabilities
+- top-level call with override uses that explicit envelope
+- nested call without override inherits the parent envelope
+- nested call with override must stay within the parent envelope
 
-### 3. Inbound / typed / outbound policy layering
+This makes composition tools possible without allowing delegated calls to mint
+new authority.
 
-The policy plane now evaluates policies in this order:
+## Policy model
 
-1. **inbound global policies**
-2. **typed/action-specific policies**
-3. **outbound global policies**
+Actions are authorized by `PolicyPlane` in this order:
+
+1. inbound global policies
+2. typed action-specific policies
+3. outbound global policies
 4. default deny
 
-The important current use is the inbound capability gate.
-
-#### Inbound
-
-Inbound policy is where hard preconditions live.
-
-Today, the built-in `CapabilityEnvelopePolicy` checks whether:
+The built-in `CapabilityEnvelopePolicy` is an inbound gate:
 
 ```text
-action.capabilities() ⊆ current effective capabilities
+action.capabilities() subset_of current_effective_capabilities
 ```
 
-If not, the action is denied before any finer-grained resource policy can allow it.
+If the action exceeds the current envelope, it is denied before any
+resource-specific policy can allow it.
 
-#### Typed / action-specific policy
+Typed policies decide whether a concrete resource is acceptable, for example:
 
-These policies decide whether a specific resource is allowed.
-
-Examples in the codebase:
-
-- allow exactly one file path
-- allow reads under a directory prefix
-- allow reads inside the workspace
-- allow one exact URL
-- allow fetches under a domain suffix
-
-This separation is intentional:
-
-- inbound decides whether the invocation may even attempt the class of action
-- typed policy decides whether the concrete resource is acceptable
-
-#### Outbound
-
-Outbound global policy hooks still exist in the policy plane as an extension point for later global authorization logic.
-
-At the moment, this repository does **not** implement an output-authorization subsystem, and the README intentionally does not describe one.
-
-### 4. Deny-by-default
+- exact file read/write
+- workspace file read/write
+- exact URL fetch
+- domain-suffix URL fetch
 
 If no policy grants an action, the action is denied.
 
-This is a small but important default. The system does not silently fall through to implicit allow.
+## Service model
 
-### 5. Service isolation
+Services are kernel-owned facades over side-effect domains.
 
-Filesystem and network access are modeled as kernel-owned services.
+Current domains:
 
-This gives a few benefits:
+- filesystem read/write
+- network fetch
 
-- tools get a stable API like `ctx.fs()` and `ctx.network()`
-- authorization logic stays centralized
-- audit records can be attached to semantic actions
-- executor implementations can be swapped independently from policy logic
+The facade constructs an action, asks policy for a grant, and only then delegates
+to the executor. This keeps tool logic, authorization, audit, and domain I/O in
+separate layers.
 
-### 6. Workspace boundary checks
+Filesystem access also canonicalizes paths against the workspace root before
+execution. Existing write targets are canonicalized directly; new targets are
+checked by canonicalizing the parent directory and then re-attaching the file
+name.
 
-For filesystem reads, the target path is canonicalized and checked to remain under the workspace root before execution.
+## Audit model
 
-For filesystem writes, existing targets are canonicalized directly. New targets are authorized by canonicalizing the parent directory first and then re-attaching the file name.
-
-This helps prevent obvious path-escape issues such as `../` traversal from bypassing workspace boundaries while still allowing creation of new files inside the workspace.
-
-### 7. Auditability
-
-The kernel emits structured audit events around:
+Audit records are emitted around:
 
 - tool invocation
-- action grant attempts
-- grant allow / deny
-- action execution start / finish / error
 - effective capability scope
-- nested capability overrides
+- nested capability override decisions
 - attempted nested capability expansion
+- grant allow/deny decisions
+- action execution start, finish, and error
 
-The current audit logs are intentionally verbose enough to explain not only *what happened*, but also *why a decision was made*.
+The audit layer is deliberately verbose for an MVP because the architecture is
+meant to make authorization decisions inspectable.
 
-## Current examples
+## Current boundaries
 
-### `read_file`
+This repository does not claim to be a finished security system.
 
-`read_file` demonstrates a straightforward service-backed tool:
+Known MVP boundaries:
 
-- declared capability: `FsRead`
-- implementation calls `ctx.fs().read_file(...)`
-- actual file access still requires matching policy, such as `AllowWorkspaceReadPolicy`
+- tool-to-tool invocation is not yet modeled as its own action/capability
+- only filesystem and network service examples are fleshed out
+- URL handling is intentionally simple
+- `ToolOutcome.classification` exists in the contract but is not enforced as an
+  output authorization boundary
 
-### `write_file`
-
-`write_file` demonstrates the write side of the same service-backed pipeline:
-
-- declared capability: `FsWrite`
-- implementation calls `ctx.fs().write_file(...)`
-- actual file mutation still requires matching policy, such as `AllowWorkspaceWritePolicy`
-- current behavior is overwrite-or-create within an already authorized parent directory
-
-### `double`
-
-`double` demonstrates nested tool invocation.
-
-Its own declared capabilities are empty. That is deliberate.
-
-It can still successfully invoke `read_file` when the host gives the top-level invocation an explicit effective capability override that includes `FsRead`.
-
-This shows the distinction between:
-
-- static declaration
-- invocation-time effective authority
-
-## Current non-goals and limitations
-
-This is an MVP, so some things are intentionally incomplete.
-
-### No dedicated tool-invocation capability yet
-
-Tool-to-tool invocation is supported, but there is not yet a first-class `Action` / `Capability` specifically modeling “invoke another tool”.
-
-That would be a natural next step if this system grows.
-
-### Limited service surface
-
-The current repository only has fleshed-out examples for:
-
-- filesystem reads and writes
-- network fetches
-
-The `Capability` enum already hints at broader domains, but those services are not yet implemented here.
-
-### URL parsing is still MVP-grade
-
-The current network example uses a simple host extraction helper rather than a fully normalized URL model.
-
-That is fine for an MVP, but not something to oversell as production-grade URL authorization.
-
-### `ToolOutcome.classification` is not described as a security boundary
-
-The shared contract still contains `ToolOutcome.classification`, but this README does not treat it as an enforced authorization layer.
-
-## Why this design is interesting
-
-Many MVP tool systems collapse these concerns together:
-
-- tool logic
-- side effects
-- authorization
-- audit
-- delegation
-
-This repository deliberately does not.
-
-The value of this codebase is less about “how many tools exist today” and more about the fact that it already separates:
-
-- **what a tool wants to do**
-- **what action that becomes**
-- **what policy says about it**
-- **what authority the current invocation actually has**
-- **what gets recorded for later inspection**
-
-That separation is what makes later hardening possible.
-
-## Quick start
-
-Run tests:
-
-```sh
-cargo test --workspace
-```
-
-Run clippy:
-
-```sh
-cargo clippy --workspace --all-targets -- -D warnings
-```
-
-Run formatting check:
-
-```sh
-cargo fmt --all -- --check
-```
-
-Run the demo:
-
-```sh
-cargo run -p mvp-demo
-```
-
-## Suggested next steps
-
-If this MVP continues, the most natural follow-ups are:
-
-1. model tool-to-tool invocation as its own action / capability
-2. add more service domains such as process / secret / time
-3. harden URL handling for network policy
-4. expand audit schema and documentation
-5. add integration-style tests for larger invocation chains
-
----
-
-This project is small on purpose. The main artifact is the execution model and the safety-oriented layering, not feature count.
+The design value is the separation between tool intent, semantic actions, policy
+decisions, effective authority, service execution, and audit.
