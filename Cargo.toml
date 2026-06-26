@@ -10,6 +10,7 @@ members = [
     "crates/kernel",
     "crates/builtin",
     "crates/app",
+    "crates/monty-tool",
 ]
 default-members = [
     ".",
@@ -17,8 +18,10 @@ default-members = [
     "crates/kernel",
     "crates/builtin",
     "crates/app",
+    "crates/monty-tool",
 ]
 resolver = "2"
+exclude = ["third_party/monty"]
 
 [workspace.dependencies]
 async-trait = "0.1"
@@ -31,6 +34,7 @@ mvp-contract = { path = "crates/contract" }
 mvp-kernel = { path = "crates/kernel" }
 mvp-builtin = { path = "crates/builtin" }
 mvp-app = { path = "crates/app" }
+mvp-monty-tool = { path = "crates/monty-tool" }
 
 [dependencies]
 serde_json.workspace = true
@@ -39,4 +43,5 @@ mvp-contract.workspace = true
 mvp-kernel.workspace = true
 mvp-builtin.workspace = true
 mvp-app.workspace = true
+mvp-monty-tool.workspace = true
 tracing-subscriber.workspace = true

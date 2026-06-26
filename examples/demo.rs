@@ -7,6 +7,7 @@ use mvp_kernel::kernel::Kernel;
 use mvp_kernel::service::fs::{
     AllowExactFileWritePolicy, AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy,
 };
+use mvp_monty_tool::{MontyOsTool, MontyTool};
 use serde_json::json;
 use tracing_subscriber::{EnvFilter, fmt};
 
@@ -34,6 +35,13 @@ async fn main() {
     app.register(WriteFileTool).unwrap();
     app.register(ReadFileTool).unwrap();
     app.register(Double).unwrap();
+    app.register(
+        MontyTool::new()
+            .expose("read_file", "read_file")
+            .expose("write_file", "write_file"),
+    )
+    .unwrap();
+    app.register(MontyOsTool).unwrap();
     app.policy.append(AllowWorkspaceFsPolicy);
     app.policy
         .append(AllowExactFileWritePolicy::new(root.join("hello.txt")));
@@ -77,9 +85,22 @@ async fn main() {
         .await
         .unwrap_err();
 
+    let monty_read_outcome = app
+        .invoke(
+            "monty".into(),
+            &read_params,
+            json!({
+                "session_id": "demo",
+                "code": "from pathlib import Path\nPath('hello.txt').read_text()",
+            }),
+        )
+        .await
+        .unwrap();
+
     println!("write_outcome:\n{write_outcome:#?}");
     println!("read_outcome:\n{read_outcome:#?}");
     println!("read_err:\n{read_outcome_err:#?}");
+    println!("monty_read_outcome:\n{monty_read_outcome:#?}");
 
     std::fs::remove_dir_all(root).unwrap();
 }

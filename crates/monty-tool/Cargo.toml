@@ -1,0 +1,16 @@
+[package]
+name = "mvp-monty-tool"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait.workspace = true
+serde_json.workspace = true
+mvp-contract.workspace = true
+mvp-kernel.workspace = true
+monty = { path = "../../third_party/monty/crates/monty" }
+
+[dev-dependencies]
+tokio.workspace = true
+mvp-builtin.workspace = true
+mvp-kernel = { workspace = true, features = ["test-support"] }

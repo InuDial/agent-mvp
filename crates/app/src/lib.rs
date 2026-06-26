@@ -18,12 +18,17 @@ use mvp_kernel::{
     },
     tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
 };
+use mvp_monty_tool::{
+    HasMontySessionService, HasMontySessionStore, MemoryMontySessionStore, MontySessionService,
+    MontySessionStore,
+};
 use serde_json::Value;
 
 pub struct App {
     tools: BTreeMap<ToolName, RegisteredTool<App>>,
     fs: StdFsBackend,
     network: DenyNetworkBackend,
+    monty_sessions: MemoryMontySessionStore,
     pub policy: PolicyPlane<KernelPolicyContextFactory>,
 }
 
@@ -42,6 +47,7 @@ impl App {
             tools: BTreeMap::new(),
             fs: StdFsBackend,
             network: DenyNetworkBackend,
+            monty_sessions: MemoryMontySessionStore::new(),
             policy,
         }
     }
@@ -66,6 +72,12 @@ impl HasFsBackend for App {
 impl HasNetworkBackend for App {
     fn network_backend(&self) -> &dyn NetworkBackend {
         &self.network
+    }
+}
+
+impl HasMontySessionStore for App {
+    fn monty_session_store(&self) -> &dyn MontySessionStore {
+        &self.monty_sessions
     }
 }
 
@@ -155,6 +167,12 @@ impl HasFsService<App> for AppToolContext<'_> {
 impl HasNetworkService<App> for AppToolContext<'_> {
     fn network(&self) -> NetworkService<'_, App> {
         NetworkService::new(self.app, self.policy_context())
+    }
+}
+
+impl HasMontySessionService<App> for AppToolContext<'_> {
+    fn monty_sessions(&self) -> MontySessionService<'_> {
+        MontySessionService::new(self.app.monty_session_store(), self.workspace_root())
     }
 }
 
