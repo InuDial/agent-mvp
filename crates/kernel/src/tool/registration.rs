@@ -11,7 +11,7 @@ use serde_json::Value;
 /// kernel's registered identity for that tool and is passed into service
 /// sub-contexts so they can check declared capabilities and emit audit records.
 pub struct ToolRegistration {
-    pub(crate) spec: ToolSpec,
+    pub spec: ToolSpec,
     registered_at: std::time::SystemTime,
 }
 
