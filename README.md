@@ -26,23 +26,59 @@ crates/builtin    Example tools that exercise the architecture
 crates/demo       Small end-to-end executable
 ```
 
-## Core layers
+## Logical layers
 
 ```mermaid
 flowchart TD
-    Host[Host / caller] --> Contract[contract types]
-    Host --> App[app::App]
-    App --> Kernel[kernel traits]
-    Kernel --> Context[ToolContext]
-    Context --> Tool[ToolImpl]
-    Tool --> Service[Service facade]
-    Service --> Action[Action]
-    Action --> Policy[PolicyPlane]
-    Policy --> Grant[Granted action]
-    Grant --> Executor[Service executor]
-    Policy --> Audit[Audit records]
-    Kernel --> Audit
+    Host[Host / caller] -->|ToolRequest + InvocationParams| Invocation[Invocation]
+    Invocation -->|per-call runtime state| Context[ToolContext]
+    Context -->|input + effective capabilities| Tool[ToolImpl]
+    Tool -->|service call| Service[Service facade]
+    Service -->|Action| Policy[PolicyPlane]
+    Policy -->|Granted<Action>| Service
+    Service -->|authorized domain operation| Executor[Service executor]
+    Invocation -->|invocation events| Audit[Audit sink]
+    Policy -->|grant decisions| Audit
+    Executor -->|execution result / error| Audit
 ```
+
+The logical architecture is about runtime responsibility:
+
+- **Host / caller** supplies `ToolRequest` and `InvocationParams`.
+- **Invocation** resolves the target tool and creates the per-call context.
+- **Tool context** carries workspace root, effective capabilities, services, and
+  nested invocation.
+- **Tool implementation** parses input and asks the context for service access.
+- **Service facade** converts side-effect requests into semantic actions and
+  executes only after policy returns a grant.
+- **Policy plane** decides whether an action is denied or returned as
+  `Granted<Action>`.
+- **Executor** performs the authorized domain operation.
+- **Audit** records invocation events, grant decisions, and execution results.
+
+## Implementation layers
+
+```text
+demo
+  depends on app + builtin
+
+app
+  concrete Kernel implementation and runtime wiring
+
+builtin
+  example ToolImpl implementations
+
+kernel
+  reusable traits, policy engine, service facades, audit, action flow
+
+contract
+  shared request/outcome/spec/capability types
+```
+
+The implementation layout is about code ownership and dependency direction.
+`contract` is the lowest shared layer. `kernel` defines reusable runtime
+mechanics. `app` wires those mechanics into a concrete kernel. `builtin` supplies
+tools that can run on that kernel-facing abstraction. `demo` composes the pieces.
 
 ### `contract`
 
