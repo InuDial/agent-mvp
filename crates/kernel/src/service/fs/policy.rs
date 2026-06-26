@@ -1,3 +1,9 @@
+//! Filesystem resource policies.
+//!
+//! These policies compare canonical action paths with canonical policy operands:
+//! exact paths use `CanonicalPath`, prefix policies use `CanonicalPrefix`, and
+//! workspace policies use the `CanonicalRoot` carried by the policy context.
+
 use async_trait::async_trait;
 use std::path::PathBuf;
 

@@ -1,10 +1,22 @@
+[package]
+name = "mvp"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
 [workspace]
 members = [
     "crates/contract",
     "crates/kernel",
     "crates/builtin",
     "crates/app",
-    "crates/demo",
+]
+default-members = [
+    ".",
+    "crates/contract",
+    "crates/kernel",
+    "crates/builtin",
+    "crates/app",
 ]
 resolver = "2"
 
@@ -19,3 +31,12 @@ mvp-contract = { path = "crates/contract" }
 mvp-kernel = { path = "crates/kernel" }
 mvp-builtin = { path = "crates/builtin" }
 mvp-app = { path = "crates/app" }
+
+[dependencies]
+serde_json.workspace = true
+tokio.workspace = true
+mvp-contract.workspace = true
+mvp-kernel.workspace = true
+mvp-builtin.workspace = true
+mvp-app.workspace = true
+tracing-subscriber.workspace = true

@@ -1,3 +1,10 @@
+//! Structured audit helpers for invocation, authorization, and execution.
+//!
+//! Final grant and execution events are emitted at INFO. Per-policy evaluation
+//! records are emitted at DEBUG so operators can inspect why a policy allowed,
+//! denied, or abstained without making every intermediate decision part of the
+//! default audit stream.
+
 use tracing::{Span, debug, info, info_span, warn};
 
 use crate::action::AuditResource;

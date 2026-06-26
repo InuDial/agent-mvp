@@ -7,6 +7,40 @@ The project is intentionally small. Its main artifact is the runtime architectur
 tools do not perform side effects directly; they request kernel-owned services,
 which turn requests into auditable actions and authorize them through policy.
 
+## Start here
+
+The whole design can be summarized as:
+
+```text
+ToolImpl
+  -> Service facade
+  -> Action
+  -> PolicyPlane
+  -> Granted<Action>
+  -> Executor
+  -> Audit
+```
+
+Read these first:
+
+- [docs/architecture.md](docs/architecture.md): the runtime model and reading
+  path
+- [docs/design.md](docs/design.md): design-purpose index for each important type
+  and pattern
+
+If you want to jump straight into code, read in this order:
+
+1. `crates/kernel/src/action.rs`
+2. `crates/kernel/src/policy/decision.rs`
+3. `crates/kernel/src/policy/plane.rs`
+4. `crates/kernel/src/policy/grant.rs`
+5. `crates/kernel/src/service/fs/mod.rs`
+6. `crates/kernel/src/service/fs/action.rs`
+7. `crates/kernel/src/service/fs/policy.rs`
+8. `crates/kernel/src/audit.rs`
+9. `crates/app/src/lib.rs`
+10. `crates/builtin/src`
+
 ## Architecture goals
 
 - Keep protocol types separate from runtime execution.
@@ -23,7 +57,7 @@ crates/contract   Shared protocol, metadata, capabilities, invocation params
 crates/kernel     Kernel traits, tool context, actions, policy, services, audit
 crates/app        Concrete application kernel wiring tools, services, and policy
 crates/builtin    Example tools that exercise the architecture
-crates/demo       Small end-to-end executable
+examples/demo.rs  Small end-to-end executable example
 ```
 
 ## Logical layers
@@ -60,7 +94,7 @@ The logical architecture is about runtime responsibility:
 ## Implementation layers
 
 ```text
-demo
+example demo
   depends on app + builtin
 
 app
@@ -79,7 +113,8 @@ contract
 The implementation layout is about code ownership and dependency direction.
 `contract` is the lowest shared layer. `kernel` defines reusable runtime
 mechanics. `app` wires those mechanics into a concrete kernel. `builtin` supplies
-tools that can run on that kernel-facing abstraction. `demo` composes the pieces.
+tools that can run on that kernel-facing abstraction. `examples/demo.rs` composes
+the pieces.
 
 ### `contract`
 
@@ -103,13 +138,15 @@ boundary.
 - inbound, typed, and outbound policy evaluation
 - filesystem and network service facades
 - structured audit helpers
+- canonical filesystem path types
 
 The kernel crate contains the design primitives, but not the concrete application
 state.
 
 ### `app`
 
-`mvp-app` is the concrete kernel implementation used by the demo and tests.
+`mvp-app` is the concrete kernel implementation used by the example demo and
+tests.
 
 It wires together:
 
@@ -131,6 +168,12 @@ This crate is where invocation parameters become an effective runtime context.
 - `double` performs nested tool invocation
 
 These tools are examples, not the architectural center of the repository.
+
+Run the end-to-end example with:
+
+```sh
+cargo run --example demo
+```
 
 ## Invocation model
 
@@ -191,6 +234,15 @@ Typed policies decide whether a concrete resource is acceptable, for example:
 
 If no policy grants an action, the action is denied.
 
+Each policy returns a `PolicyGrant` containing:
+
+- `decision`: `allow`, `deny`, or `abstain`
+- `reason`: human-readable explanation
+- `predicate`: diagnostic predicate recorded in DEBUG audit
+
+This keeps policy-specific explanations with the policy while leaving emission
+and final grant handling centralized in `PolicyPlane`.
+
 ## Service model
 
 Services are kernel-owned facades over side-effect domains.
@@ -209,6 +261,13 @@ execution. Existing write targets are canonicalized directly; new targets are
 checked by canonicalizing the parent directory and then re-attaching the file
 name.
 
+The fs model uses canonical path types so policy comparisons happen in one path
+space:
+
+- `CanonicalPath` for action resources
+- `CanonicalRoot` for workspace containment
+- `CanonicalPrefix` for prefix policies
+
 ## Audit model
 
 Audit records are emitted around:
@@ -217,11 +276,16 @@ Audit records are emitted around:
 - effective capability scope
 - nested capability override decisions
 - attempted nested capability expansion
+- per-policy evaluation diagnostics at DEBUG level
 - grant allow/deny decisions
 - action execution start, finish, and error
 
 The audit layer is deliberately verbose for an MVP because the architecture is
 meant to make authorization decisions inspectable.
+
+Final authorization records such as `grant_allow` and `grant_deny` are INFO.
+Per-policy `policy_grant` records are DEBUG because they explain the evaluation
+path rather than the final authorization fact.
 
 ## Current boundaries
 

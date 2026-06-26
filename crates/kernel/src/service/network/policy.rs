@@ -1,3 +1,9 @@
+//! Network resource policies.
+//!
+//! Network policies are intentionally small in this MVP: exact URL matching and
+//! domain suffix matching. URL parsing is simple and called out as an MVP
+//! boundary in the project docs.
+
 use async_trait::async_trait;
 
 use crate::policy::{Policy, PolicyContextFactory, PolicyGrant};

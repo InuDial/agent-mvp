@@ -77,6 +77,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
+name = "mvp"
+version = "0.1.0"
+dependencies = [
+ "mvp-app",
+ "mvp-builtin",
+ "mvp-contract",
+ "mvp-kernel",
+ "serde_json",
+ "tokio",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "mvp-app"
 version = "0.1.0"
 dependencies = [
@@ -107,19 +120,6 @@ dependencies = [
  "bitflags",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "mvp-demo"
-version = "0.1.0"
-dependencies = [
- "mvp-app",
- "mvp-builtin",
- "mvp-contract",
- "mvp-kernel",
- "serde_json",
- "tokio",
- "tracing-subscriber",
 ]
 
 [[package]]

@@ -34,7 +34,6 @@ async fn main() {
     app.register(WriteFileTool).unwrap();
     app.register(ReadFileTool).unwrap();
     app.register(Double).unwrap();
-    // Workspace FS can be default allowed
     app.policy.append(AllowWorkspaceFsPolicy);
     app.policy
         .append(AllowExactFileWritePolicy::new(root.join("hello.txt")));
@@ -60,7 +59,7 @@ async fn main() {
             &read_params,
             json!({
                 "name": "read_file",
-                "payload":{ "path": "hello.txt" },
+                "payload": { "path": "hello.txt" },
             }),
         )
         .await
@@ -72,7 +71,7 @@ async fn main() {
             &write_params,
             json!({
                 "name": "read_file",
-                "payload":{ "path": "hello.txt" },
+                "payload": { "path": "hello.txt" },
             }),
         )
         .await

@@ -31,7 +31,6 @@ impl App {
     pub fn new() -> Self {
         let mut policy = PolicyPlane::new();
         policy.prepend_inbound(CapabilityEnvelopePolicy);
-        policy.append::<FsAction, _>(AllowWorkspaceFsPolicy);
 
         Self {
             tools: BTreeMap::new(),

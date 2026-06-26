@@ -1,3 +1,9 @@
+//! Tool registration, invocation context, and runtime adapters.
+//!
+//! User code implements `ToolImpl`. The kernel wraps implementations into
+//! registered runtime adapters so invocation, parsing, capability scope, and
+//! audit can be handled consistently.
+
 mod adapter;
 mod context;
 mod registration;

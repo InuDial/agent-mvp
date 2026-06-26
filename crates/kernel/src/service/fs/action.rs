@@ -1,3 +1,9 @@
+//! Filesystem action and canonical path types.
+//!
+//! The fs service converts user-facing paths into canonical path values before
+//! authorization. This keeps exact, prefix, and workspace policies comparing the
+//! same filesystem representation instead of raw input strings.
+
 use std::path::{Path, PathBuf};
 
 use mvp_contract::{Capabilities, Capability};

@@ -1,3 +1,9 @@
+//! Shared action traits used by service facades, policy, and execution.
+//!
+//! An `Action` is the semantic unit that policy understands. Service facades
+//! construct actions from tool requests, the policy plane grants or denies them,
+//! and only `Granted<Action>` values can execute through `ExecutableAction`.
+
 use std::any::Any;
 use std::future::Future;
 use std::path::PathBuf;

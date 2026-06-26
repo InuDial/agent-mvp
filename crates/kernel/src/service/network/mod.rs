@@ -1,3 +1,8 @@
+//! Network service facade.
+//!
+//! The network facade exposes URL fetches to tools while preserving the shared
+//! action -> policy -> grant -> execute pipeline used by other services.
+
 use crate::error::ExecutionError;
 use crate::kernel::Kernel;
 use crate::policy::{PolicyContextFactory, PolicyEngine};

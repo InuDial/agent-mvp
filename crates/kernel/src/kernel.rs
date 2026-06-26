@@ -1,3 +1,9 @@
+//! Kernel trait implemented by concrete runtimes.
+//!
+//! A kernel wires registered tools, service executors, policy, and invocation
+//! context creation. Tools are generic over this trait so builtins can run on
+//! any compatible runtime.
+
 use async_trait::async_trait;
 use mvp_contract::{InvocationParams, ToolOutcome};
 use serde_json::Value;
