@@ -34,7 +34,7 @@ pub(crate) fn record_tool_capabilities_override(
     }
 }
 
-pub(crate) fn record_nested_capability_override(
+pub fn record_nested_capability_override(
     parent_registration: &ToolRegistration,
     child_tool: &ToolName,
     parent_effective_capabilities: Capabilities,

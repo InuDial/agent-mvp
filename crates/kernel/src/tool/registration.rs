@@ -1,6 +1,7 @@
-use super::adapter::ToolAdapter;
+use super::adapter::{KernelToolAdapter, ToolAdapter};
 use crate::error::ToolError;
-use crate::tool::ToolPlaneContext;
+use crate::kernel::Kernel;
+use crate::tool::ToolImpl;
 use mvp_contract::{ToolOutcome, ToolRequest, ToolSpec};
 
 /// Kernel-owned metadata attached when a `ToolImpl` is accepted by `ToolPlane`.
@@ -14,7 +15,7 @@ pub struct ToolRegistration {
 }
 
 impl ToolRegistration {
-    pub(crate) fn new(spec: ToolSpec) -> Result<Self, ToolError> {
+    pub fn new(spec: ToolSpec) -> Result<Self, ToolError> {
         if spec.name.is_empty() {
             return Err(ToolError::InvalidSpec);
         }
@@ -35,17 +36,26 @@ impl ToolRegistration {
 }
 
 /// One registered entry: registration metadata plus its runtime adapter.
-pub struct RegisteredTool {
+pub struct RegisteredTool<K: Kernel> {
     registration: ToolRegistration,
-    adapter: Box<dyn ToolAdapter>,
+    adapter: Box<dyn ToolAdapter<K>>,
 }
 
-impl RegisteredTool {
-    pub(crate) fn new(registration: ToolRegistration, adapter: Box<dyn ToolAdapter>) -> Self {
+impl<K: Kernel> RegisteredTool<K> {
+    pub(crate) fn new(registration: ToolRegistration, adapter: Box<dyn ToolAdapter<K>>) -> Self {
         Self {
             registration,
             adapter,
         }
+    }
+
+    pub fn from_tool<T: ToolImpl<K>>(tool: T) -> Result<Self, ToolError>
+    where
+        K: 'static,
+    {
+        let registration = ToolRegistration::new(tool.spec())?;
+        let adapter = Box::new(KernelToolAdapter::new(tool));
+        Ok(Self::new(registration, adapter))
     }
 
     pub fn registration(&self) -> &ToolRegistration {
@@ -56,9 +66,9 @@ impl RegisteredTool {
         self.registration.spec()
     }
 
-    pub(crate) async fn invoke(
+    pub async fn invoke(
         &self,
-        ctx: &ToolPlaneContext<'_>,
+        ctx: &K::ToolCx<'_>,
         req: ToolRequest,
     ) -> Result<ToolOutcome, ToolError> {
         self.adapter.invoke(ctx, req).await

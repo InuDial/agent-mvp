@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use crate::policy::{KernelPolicyContext, Policy, PolicyDecision};
+use crate::policy::{Policy, PolicyContextFactory, PolicyDecision, WorkspacePolicyContext};
 
 use super::action::{FsReadAction, FsWriteAction};
 
@@ -19,12 +19,15 @@ impl AllowExactFileReadPolicy {
 }
 
 #[async_trait]
-impl Policy<KernelPolicyContext, FsReadAction> for AllowExactFileReadPolicy {
+impl<F> Policy<F, FsReadAction> for AllowExactFileReadPolicy
+where
+    F: PolicyContextFactory,
+{
     fn name(&self) -> &'static str {
         "fs.allow_exact_file_read"
     }
 
-    async fn grant(&self, _ctx: &KernelPolicyContext, action: &FsReadAction) -> PolicyDecision {
+    async fn grant(&self, _ctx: &F::Context<'_>, action: &FsReadAction) -> PolicyDecision {
         if action.path.as_path() == self.allowed.as_path() {
             PolicyDecision::Allow { reason: None }
         } else {
@@ -47,12 +50,15 @@ impl AllowFileReadPrefixPolicy {
 }
 
 #[async_trait]
-impl Policy<KernelPolicyContext, FsReadAction> for AllowFileReadPrefixPolicy {
+impl<F> Policy<F, FsReadAction> for AllowFileReadPrefixPolicy
+where
+    F: PolicyContextFactory,
+{
     fn name(&self) -> &'static str {
         "fs.allow_file_read_prefix"
     }
 
-    async fn grant(&self, _ctx: &KernelPolicyContext, action: &FsReadAction) -> PolicyDecision {
+    async fn grant(&self, _ctx: &F::Context<'_>, action: &FsReadAction) -> PolicyDecision {
         if action.path.as_path().starts_with(&self.prefix) {
             PolicyDecision::Allow { reason: None }
         } else {
@@ -65,12 +71,16 @@ impl Policy<KernelPolicyContext, FsReadAction> for AllowFileReadPrefixPolicy {
 pub struct AllowWorkspaceReadPolicy;
 
 #[async_trait]
-impl Policy<KernelPolicyContext, FsReadAction> for AllowWorkspaceReadPolicy {
+impl<F> Policy<F, FsReadAction> for AllowWorkspaceReadPolicy
+where
+    F: PolicyContextFactory,
+    for<'a> F::Context<'a>: WorkspacePolicyContext,
+{
     fn name(&self) -> &'static str {
         "fs.allow_workspace_read"
     }
 
-    async fn grant(&self, ctx: &KernelPolicyContext, action: &FsReadAction) -> PolicyDecision {
+    async fn grant(&self, ctx: &F::Context<'_>, action: &FsReadAction) -> PolicyDecision {
         if action.path.as_path().starts_with(ctx.workspace_root()) {
             PolicyDecision::Allow { reason: None }
         } else {
@@ -93,12 +103,15 @@ impl AllowExactFileWritePolicy {
 }
 
 #[async_trait]
-impl Policy<KernelPolicyContext, FsWriteAction> for AllowExactFileWritePolicy {
+impl<F> Policy<F, FsWriteAction> for AllowExactFileWritePolicy
+where
+    F: PolicyContextFactory,
+{
     fn name(&self) -> &'static str {
         "fs.allow_exact_file_write"
     }
 
-    async fn grant(&self, _ctx: &KernelPolicyContext, action: &FsWriteAction) -> PolicyDecision {
+    async fn grant(&self, _ctx: &F::Context<'_>, action: &FsWriteAction) -> PolicyDecision {
         if action.path.as_path() == self.allowed.as_path() {
             PolicyDecision::Allow { reason: None }
         } else {
@@ -121,12 +134,15 @@ impl AllowFileWritePrefixPolicy {
 }
 
 #[async_trait]
-impl Policy<KernelPolicyContext, FsWriteAction> for AllowFileWritePrefixPolicy {
+impl<F> Policy<F, FsWriteAction> for AllowFileWritePrefixPolicy
+where
+    F: PolicyContextFactory,
+{
     fn name(&self) -> &'static str {
         "fs.allow_file_write_prefix"
     }
 
-    async fn grant(&self, _ctx: &KernelPolicyContext, action: &FsWriteAction) -> PolicyDecision {
+    async fn grant(&self, _ctx: &F::Context<'_>, action: &FsWriteAction) -> PolicyDecision {
         if action.path.as_path().starts_with(&self.prefix) {
             PolicyDecision::Allow { reason: None }
         } else {
@@ -139,12 +155,16 @@ impl Policy<KernelPolicyContext, FsWriteAction> for AllowFileWritePrefixPolicy {
 pub struct AllowWorkspaceWritePolicy;
 
 #[async_trait]
-impl Policy<KernelPolicyContext, FsWriteAction> for AllowWorkspaceWritePolicy {
+impl<F> Policy<F, FsWriteAction> for AllowWorkspaceWritePolicy
+where
+    F: PolicyContextFactory,
+    for<'a> F::Context<'a>: WorkspacePolicyContext,
+{
     fn name(&self) -> &'static str {
         "fs.allow_workspace_write"
     }
 
-    async fn grant(&self, ctx: &KernelPolicyContext, action: &FsWriteAction) -> PolicyDecision {
+    async fn grant(&self, ctx: &F::Context<'_>, action: &FsWriteAction) -> PolicyDecision {
         if action.path.as_path().starts_with(ctx.workspace_root()) {
             PolicyDecision::Allow { reason: None }
         } else {

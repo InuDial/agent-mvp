@@ -1,14 +1,14 @@
 [package]
-name = "mvp-builtin"
+name = "mvp-app"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 async-trait.workspace = true
-serde_json.workspace = true
 mvp-contract.workspace = true
 mvp-kernel.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
-mvp-kernel = { workspace = true, features = ["test-support"] }
+serde_json.workspace = true

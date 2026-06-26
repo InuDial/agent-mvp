@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use mvp_contract::{Capability, OutputClassification, ToolOutcome, ToolSpec};
 use mvp_kernel::error::{InputError, ToolError};
-use mvp_kernel::tool::{ToolImpl, ToolPlaneContext};
+use mvp_kernel::kernel::Kernel;
+use mvp_kernel::service::fs::{FsService, FsToolContextExt};
+use mvp_kernel::tool::ToolImpl;
 use serde_json::{Value, json};
 
 pub struct WriteFileTool;
@@ -23,7 +25,10 @@ impl From<WriteFileOutput> for ToolOutcome {
 }
 
 #[async_trait]
-impl ToolImpl for WriteFileTool {
+impl<K> ToolImpl<K> for WriteFileTool
+where
+    K: Kernel + FsService,
+{
     type Input = WriteFileInput;
     type Output = WriteFileOutput;
 
@@ -52,7 +57,7 @@ impl ToolImpl for WriteFileTool {
 
     async fn execute(
         &self,
-        ctx: &ToolPlaneContext<'_>,
+        ctx: &K::ToolCx<'_>,
         input: Self::Input,
     ) -> Result<Self::Output, ToolError> {
         ctx.fs()
@@ -67,86 +72,65 @@ impl ToolImpl for WriteFileTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mvp_contract::ToolRequest;
+    use mvp_contract::{InvocationParams, ToolRequest};
     use mvp_kernel::{
         error::{AuthorizationError, ToolError},
-        service::{
-            fs::{AllowWorkspaceWritePolicy, StdFs},
-            network::DenyNetwork,
-        },
-        tool::{InvocationParams, ToolPlane},
+        service::fs::AllowWorkspaceWritePolicy,
+        test_support::{MockKernel, TempWorkspace},
     };
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(prefix: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!(
-            "tool-plane-{}-{}-{}",
-            prefix,
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ))
-    }
 
     #[tokio::test]
     async fn write_file_goes_through_kernel_pipeline() {
-        let root = temp_root("write-file");
-        std::fs::create_dir_all(root.join("nested")).unwrap();
+        let ws = TempWorkspace::with_prefix("builtin-write-file");
+        std::fs::create_dir_all(ws.root.join("nested")).unwrap();
 
-        let mut plane = ToolPlane::new(StdFs::new(), DenyNetwork);
-        plane.register(WriteFileTool).unwrap();
-        plane.policy.append(AllowWorkspaceWritePolicy);
+        let mut kernel = MockKernel::new();
+        kernel.register(WriteFileTool).unwrap();
+        kernel.policy.append(AllowWorkspaceWritePolicy);
 
-        let params = InvocationParams::new(&root);
-        let outcome = plane
-            .invoke(
-                &params,
-                None,
-                ToolRequest {
-                    name: "write_file".into(),
-                    payload: json!({
-                        "path": "nested/hello.txt",
-                        "content": "hello from write tool"
-                    }),
-                },
-            )
-            .await
-            .unwrap();
+        let params = InvocationParams::new(&ws.root, None);
+        let outcome = mvp_kernel::kernel::Kernel::invoke(
+            &kernel,
+            &params,
+            ToolRequest {
+                name: "write_file".into(),
+                payload: json!({
+                    "path": "nested/hello.txt",
+                    "content": "hello from write tool"
+                }),
+            },
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
-            std::fs::read_to_string(root.join("nested/hello.txt")).unwrap(),
+            std::fs::read_to_string(ws.root.join("nested/hello.txt")).unwrap(),
             "hello from write tool"
         );
         assert_eq!(outcome.payload["ok"], true);
         assert_eq!(outcome.classification, OutputClassification::Public);
-
-        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[tokio::test]
     async fn write_file_requires_matching_policy() {
-        let root = temp_root("write-file-denied");
-        std::fs::create_dir_all(&root).unwrap();
+        let ws = TempWorkspace::with_prefix("builtin-write-file-denied");
 
-        let mut plane = ToolPlane::new(StdFs::new(), DenyNetwork);
-        plane.register(WriteFileTool).unwrap();
+        let mut kernel = MockKernel::new();
+        kernel.register(WriteFileTool).unwrap();
 
-        let params = InvocationParams::new(&root);
-        let denied = plane
-            .invoke(
-                &params,
-                None,
-                ToolRequest {
-                    name: "write_file".into(),
-                    payload: json!({
-                        "path": "hello.txt",
-                        "content": "blocked"
-                    }),
-                },
-            )
-            .await;
+        let params = InvocationParams::new(&ws.root, None);
+        let denied = mvp_kernel::kernel::Kernel::invoke(
+            &kernel,
+            &params,
+            ToolRequest {
+                name: "write_file".into(),
+                payload: json!({
+                    "path": "hello.txt",
+                    "content": "blocked"
+                }),
+            },
+        )
+        .await;
 
         assert!(matches!(
             denied,
@@ -154,8 +138,6 @@ mod tests {
                 mvp_kernel::error::ExecutionError::Authorization(AuthorizationError::Denied(_))
             ))
         ));
-        assert!(!root.join("hello.txt").exists());
-
-        std::fs::remove_dir_all(root).unwrap();
+        assert!(!ws.root.join("hello.txt").exists());
     }
 }

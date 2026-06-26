@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::path::{Path, PathBuf};
 
 pub type ToolName = String;
 pub type ToolDescription = String;
@@ -135,5 +136,28 @@ impl std::iter::FromIterator<Capability> for Capabilities {
             caps |= capability.into();
         }
         caps
+    }
+}
+
+/// Per-call ambient parameters supplied by the caller.
+///
+/// These parameters describe invocation environment such as workspace root.
+/// Runtime authority is still tracked separately by the kernel on each
+/// invocation frame.
+#[derive(Clone, Debug)]
+pub struct InvocationParams {
+    pub workspace_root: PathBuf,
+    pub capabilities_override: Option<Capabilities>,
+}
+
+impl InvocationParams {
+    pub fn new(
+        workspace_root: impl AsRef<Path>,
+        capabilities_override: Option<Capabilities>,
+    ) -> Self {
+        Self {
+            workspace_root: workspace_root.as_ref().to_path_buf(),
+            capabilities_override,
+        }
     }
 }

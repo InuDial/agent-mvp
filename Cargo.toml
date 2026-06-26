@@ -3,6 +3,7 @@ members = [
     "crates/contract",
     "crates/kernel",
     "crates/builtin",
+    "crates/app",
     "crates/demo",
 ]
 resolver = "2"
@@ -17,3 +18,4 @@ bitflags = "2.13.0"
 mvp-contract = { path = "crates/contract" }
 mvp-kernel = { path = "crates/kernel" }
 mvp-builtin = { path = "crates/builtin" }
+mvp-app = { path = "crates/app" }

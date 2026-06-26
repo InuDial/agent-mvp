@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::policy::{KernelPolicyContext, Policy, PolicyDecision};
+use crate::policy::{Policy, PolicyContextFactory, PolicyDecision};
 
 use super::action::NetworkFetchAction;
 
@@ -16,16 +16,15 @@ impl AllowExactUrlFetchPolicy {
 }
 
 #[async_trait]
-impl Policy<KernelPolicyContext, NetworkFetchAction> for AllowExactUrlFetchPolicy {
+impl<F> Policy<F, NetworkFetchAction> for AllowExactUrlFetchPolicy
+where
+    F: PolicyContextFactory,
+{
     fn name(&self) -> &'static str {
         "network.allow_exact_url_fetch"
     }
 
-    async fn grant(
-        &self,
-        _ctx: &KernelPolicyContext,
-        action: &NetworkFetchAction,
-    ) -> PolicyDecision {
+    async fn grant(&self, _ctx: &F::Context<'_>, action: &NetworkFetchAction) -> PolicyDecision {
         if action.url == self.url {
             PolicyDecision::Allow { reason: None }
         } else {
@@ -48,16 +47,15 @@ impl AllowDomainFetchPolicy {
 }
 
 #[async_trait]
-impl Policy<KernelPolicyContext, NetworkFetchAction> for AllowDomainFetchPolicy {
+impl<F> Policy<F, NetworkFetchAction> for AllowDomainFetchPolicy
+where
+    F: PolicyContextFactory,
+{
     fn name(&self) -> &'static str {
         "network.allow_domain_fetch"
     }
 
-    async fn grant(
-        &self,
-        _ctx: &KernelPolicyContext,
-        action: &NetworkFetchAction,
-    ) -> PolicyDecision {
+    async fn grant(&self, _ctx: &F::Context<'_>, action: &NetworkFetchAction) -> PolicyDecision {
         match super::extract_host(&action.url) {
             Some(host) if host == self.domain || host.ends_with(&format!(".{}", self.domain)) => {
                 PolicyDecision::Allow { reason: None }

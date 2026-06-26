@@ -1,19 +1,10 @@
 mod adapter;
 mod context;
-mod invocation;
-mod plane;
 mod registration;
-mod registry;
-#[cfg(test)]
-pub(crate) mod test_utils;
 
-pub(crate) use adapter::KernelToolAdapter;
 pub use adapter::ToolImpl;
-pub use context::ToolPlaneContext;
-pub use invocation::InvocationParams;
-pub use plane::ToolPlane;
+pub use context::ToolContext;
 pub use registration::{RegisteredTool, ToolRegistration};
-pub use registry::ToolRegistry;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

@@ -1,14 +1,10 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use mvp_app::App;
 use mvp_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
-use mvp_contract::ToolRequest;
-use mvp_kernel::{
-    service::{
-        fs::{AllowWorkspaceReadPolicy, AllowWorkspaceWritePolicy, StdFs},
-        network::DenyNetwork,
-    },
-    tool::{InvocationParams, ToolPlane},
-};
+use mvp_contract::{Capability, InvocationParams, ToolRequest};
+use mvp_kernel::kernel::Kernel;
+use mvp_kernel::service::fs::{AllowWorkspaceReadPolicy, AllowWorkspaceWritePolicy};
 use serde_json::json;
 use tracing_subscriber::{EnvFilter, fmt};
 
@@ -32,18 +28,17 @@ async fn main() {
 
     std::fs::create_dir_all(&root).unwrap();
 
-    let mut plane = ToolPlane::new(StdFs::new(), DenyNetwork);
+    let mut plane = App::new();
     plane.register(WriteFileTool).unwrap();
     plane.register(ReadFileTool).unwrap();
     plane.register(Double).unwrap();
     plane.policy.append(AllowWorkspaceWritePolicy);
     plane.policy.append(AllowWorkspaceReadPolicy);
 
-    let params = InvocationParams::new(&root);
+    let write_params = InvocationParams::new(&root, Some([Capability::FsWrite].into()));
     let write_outcome = plane
         .invoke(
-            &params,
-            Some([mvp_contract::Capability::FsWrite].into()),
+            &write_params,
             ToolRequest {
                 name: "write_file".into(),
                 payload: json!({
@@ -55,10 +50,10 @@ async fn main() {
         .await
         .unwrap();
 
+    let read_params = InvocationParams::new(&root, Some([Capability::FsRead].into()));
     let read_outcome = plane
         .invoke(
-            &params,
-            Some([mvp_contract::Capability::FsRead].into()),
+            &read_params,
             ToolRequest {
                 name: "double".into(),
                 payload: json!({

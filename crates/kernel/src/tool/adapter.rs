@@ -1,9 +1,12 @@
+use std::marker::PhantomData;
+
 use async_trait::async_trait;
 use mvp_contract::{ToolOutcome, ToolRequest, ToolSpec};
 use serde_json::Value;
 use tracing::Instrument;
 
-use crate::tool::ToolPlaneContext;
+use super::context::ToolContext;
+use crate::kernel::Kernel;
 use crate::{audit, error::*};
 
 /// Sealed runtime adapter used by the registry.
@@ -12,12 +15,11 @@ use crate::{audit, error::*};
 /// Registration metadata deliberately lives alongside the adapter in
 /// `RegisteredTool`, not inside the adapter itself.
 #[async_trait]
-pub(crate) trait ToolAdapter: super::sealed::SealedToolAdapter + Send + Sync {
-    async fn invoke(
-        &self,
-        ctx: &ToolPlaneContext<'_>,
-        req: ToolRequest,
-    ) -> Result<ToolOutcome, ToolError>;
+pub(crate) trait ToolAdapter<K: Kernel>:
+    super::sealed::SealedToolAdapter + Send + Sync
+{
+    async fn invoke(&self, ctx: &K::ToolCx<'_>, req: ToolRequest)
+    -> Result<ToolOutcome, ToolError>;
 }
 
 /// Tool implementation supplied by builtins/plugins.
@@ -26,7 +28,7 @@ pub(crate) trait ToolAdapter: super::sealed::SealedToolAdapter + Send + Sync {
 /// capability sub-contexts such as `ctx.fs()` or `ctx.network()`, but it cannot
 /// implement the sealed runtime `ToolAdapter` trait directly.
 #[async_trait]
-pub trait ToolImpl: Send + Sync + 'static {
+pub trait ToolImpl<K: Kernel>: Send + Sync + 'static {
     type Input: Send + 'static;
     type Output: Send + Into<ToolOutcome> + 'static;
 
@@ -36,7 +38,7 @@ pub trait ToolImpl: Send + Sync + 'static {
 
     async fn execute(
         &self,
-        ctx: &ToolPlaneContext<'_>,
+        ctx: &K::ToolCx<'_>,
         input: Self::Input,
     ) -> Result<Self::Output, ToolError>;
 
@@ -46,26 +48,35 @@ pub trait ToolImpl: Send + Sync + 'static {
 /// Runtime adapter around a user-provided `ToolImpl`.
 ///
 /// Registration metadata deliberately lives in `RegisteredTool`, not here.
-pub struct KernelToolAdapter<T: ToolImpl> {
+pub struct KernelToolAdapter<K: Kernel, T: ToolImpl<K>> {
     inner: T,
+    phantom_data: PhantomData<fn() -> K>,
 }
 
-impl<T: ToolImpl> KernelToolAdapter<T> {
+impl<K: Kernel, T: ToolImpl<K>> KernelToolAdapter<K, T> {
     pub(crate) fn new(inner: T) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            phantom_data: PhantomData,
+        }
     }
 }
 
-impl<T: ToolImpl> super::sealed::SealedToolAdapter for KernelToolAdapter<T> {}
+impl<K: Kernel, T: ToolImpl<K>> super::sealed::SealedToolAdapter for KernelToolAdapter<K, T> {}
 
 #[async_trait]
-impl<T: ToolImpl> ToolAdapter for KernelToolAdapter<T> {
+impl<K: Kernel, T: ToolImpl<K>> ToolAdapter<K> for KernelToolAdapter<K, T> {
     async fn invoke(
         &self,
-        ctx: &ToolPlaneContext<'_>,
+        ctx: &K::ToolCx<'_>,
         req: ToolRequest,
     ) -> Result<ToolOutcome, ToolError> {
-        let registration = ctx.registration;
+        let registration = ctx.registration();
+        audit::record_tool_capabilities_override(
+            registration,
+            registration.spec().capabilities,
+            ctx.effective_capabilities(),
+        );
         let tool_span = audit::tool_invocation_span(registration);
 
         async {
