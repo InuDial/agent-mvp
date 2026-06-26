@@ -6,7 +6,7 @@ use crate::policy::{GrantDecision, GrantRecord, GrantSource};
 use crate::tool::{GrantId, ToolRegistration};
 use mvp_contract::Capabilities;
 
-pub const AUDIT_TARGET: &str = "tool_plane::audit";
+pub const AUDIT_TARGET: &str = "mvp::audit";
 
 pub fn tool_invocation_span(registration: &ToolRegistration) -> Span {
     info_span!(
