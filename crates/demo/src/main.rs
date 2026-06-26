@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use mvp_app::App;
 use mvp_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
-use mvp_contract::{Capability, InvocationParams, ToolRequest};
+use mvp_contract::{Capability, InvocationParams};
 use mvp_kernel::kernel::Kernel;
 use mvp_kernel::service::fs::{AllowWorkspaceReadPolicy, AllowWorkspaceWritePolicy};
 use serde_json::json;
@@ -38,14 +38,12 @@ async fn main() {
     let write_params = InvocationParams::new(&root, Some([Capability::FsWrite].into()));
     let write_outcome = plane
         .invoke(
+            "write_file".into(),
             &write_params,
-            ToolRequest {
-                name: "write_file".into(),
-                payload: json!({
-                    "path": "hello.txt",
-                    "content": "hello from demo",
-                }),
-            },
+            json!({
+                "path": "hello.txt",
+                "content": "hello from demo",
+            }),
         )
         .await
         .unwrap();
@@ -53,14 +51,12 @@ async fn main() {
     let read_params = InvocationParams::new(&root, Some([Capability::FsRead].into()));
     let read_outcome = plane
         .invoke(
+            "double".into(),
             &read_params,
-            ToolRequest {
-                name: "double".into(),
-                payload: json!({
-                    "name": "read_file",
-                    "payload":{ "path": "hello.txt" },
-                }),
-            },
+            json!({
+                "name": "read_file",
+                "payload":{ "path": "hello.txt" },
+            }),
         )
         .await
         .unwrap();

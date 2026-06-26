@@ -10,7 +10,8 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use mvp_contract::{Capabilities, InvocationParams, ToolName, ToolOutcome, ToolRequest, ToolSpec};
+use mvp_contract::{Capabilities, InvocationParams, ToolName, ToolOutcome, ToolSpec};
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -169,17 +170,17 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
 
     async fn invoke_tool(
         &self,
+        path: <MockKernel as Kernel>::ToolPath,
         capabilities_override: Option<Capabilities>,
-        req: ToolRequest,
+        payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        let child_tool = req.name.clone();
         let (effective_capabilities, attempted_expand) = match capabilities_override {
             Some(capabilities) => {
                 let attempted_expand = !self.effective_capabilities.contains(capabilities);
                 if attempted_expand {
                     audit::record_nested_capability_override(
                         self.registration,
-                        &child_tool,
+                        &path,
                         self.effective_capabilities,
                         Some(capabilities),
                         None,
@@ -196,7 +197,7 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
 
         audit::record_nested_capability_override(
             self.registration,
-            &child_tool,
+            &path,
             self.effective_capabilities,
             capabilities_override,
             Some(effective_capabilities),
@@ -204,7 +205,7 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
         );
 
         let params = InvocationParams::new(self.workspace_root(), Some(effective_capabilities));
-        self.kernel.invoke(&params, req).await
+        self.kernel.invoke(path, &params, payload).await
     }
 }
 
@@ -215,6 +216,7 @@ impl Kernel for MockKernel {
         = PolicyPlane<KernelPolicyContextFactory>
     where
         Self: 'a;
+    type ToolPath = String;
     type ToolCx<'a>
         = MockToolContext<'a>
     where
@@ -226,15 +228,16 @@ impl Kernel for MockKernel {
 
     async fn invoke(
         &self,
+        path: Self::ToolPath,
         params: &InvocationParams,
-        req: ToolRequest,
+        payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
         let registered = self
             .tools
-            .get(&req.name)
-            .ok_or_else(|| ToolError::UnknownTool(req.name.clone()))?;
+            .get(&path)
+            .ok_or_else(|| ToolError::UnknownTool(path.clone()))?;
         let ctx = MockToolContext::new(self, registered.registration(), params)
             .map_err(ToolError::Authorization)?;
-        registered.invoke(&ctx, req).await
+        registered.invoke(&ctx, payload).await
     }
 }

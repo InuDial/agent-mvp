@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
-use mvp_contract::{ToolOutcome, ToolRequest, ToolSpec};
+use mvp_contract::{ToolOutcome, ToolSpec};
 use serde_json::Value;
 use tracing::Instrument;
 
@@ -18,8 +18,7 @@ use crate::{audit, error::*};
 pub(crate) trait ToolAdapter<K: Kernel>:
     super::sealed::SealedToolAdapter + Send + Sync
 {
-    async fn invoke(&self, ctx: &K::ToolCx<'_>, req: ToolRequest)
-    -> Result<ToolOutcome, ToolError>;
+    async fn invoke(&self, ctx: &K::ToolCx<'_>, payload: Value) -> Result<ToolOutcome, ToolError>;
 }
 
 /// Tool implementation supplied by builtins/plugins.
@@ -66,11 +65,7 @@ impl<K: Kernel, T: ToolImpl<K>> super::sealed::SealedToolAdapter for KernelToolA
 
 #[async_trait]
 impl<K: Kernel, T: ToolImpl<K>> ToolAdapter<K> for KernelToolAdapter<K, T> {
-    async fn invoke(
-        &self,
-        ctx: &K::ToolCx<'_>,
-        req: ToolRequest,
-    ) -> Result<ToolOutcome, ToolError> {
+    async fn invoke(&self, ctx: &K::ToolCx<'_>, payload: Value) -> Result<ToolOutcome, ToolError> {
         let registration = ctx.registration();
         audit::record_tool_capabilities_override(
             registration,
@@ -84,7 +79,7 @@ impl<K: Kernel, T: ToolImpl<K>> ToolAdapter<K> for KernelToolAdapter<K, T> {
             let input = {
                 let _parse_enter = parse_span.enter();
                 self.inner
-                    .parse_input(req.payload)
+                    .parse_input(payload)
                     .map_err(ToolError::InvalidInput)?
             };
 

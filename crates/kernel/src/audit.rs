@@ -4,7 +4,7 @@ use crate::action::AuditResource;
 use crate::error::ExecutionError;
 use crate::policy::{GrantDecision, GrantRecord, GrantSource};
 use crate::tool::{GrantId, ToolRegistration};
-use mvp_contract::{Capabilities, ToolName};
+use mvp_contract::Capabilities;
 
 pub const AUDIT_TARGET: &str = "tool_plane::audit";
 
@@ -36,7 +36,7 @@ pub(crate) fn record_tool_capabilities_override(
 
 pub fn record_nested_capability_override(
     parent_registration: &ToolRegistration,
-    child_tool: &ToolName,
+    child_tool: &str,
     parent_effective_capabilities: Capabilities,
     requested_capabilities_override: Option<Capabilities>,
     actual_child_capabilities: Option<Capabilities>,

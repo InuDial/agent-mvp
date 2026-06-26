@@ -72,7 +72,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mvp_contract::{InvocationParams, ToolRequest};
+    use mvp_contract::InvocationParams;
     use mvp_kernel::{
         error::{AuthorizationError, ToolError},
         service::fs::AllowWorkspaceWritePolicy,
@@ -91,14 +91,12 @@ mod tests {
         let params = InvocationParams::new(&ws.root, None);
         let outcome = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
+            "write_file".into(),
             &params,
-            ToolRequest {
-                name: "write_file".into(),
-                payload: json!({
-                    "path": "nested/hello.txt",
-                    "content": "hello from write tool"
-                }),
-            },
+            json!({
+                "path": "nested/hello.txt",
+                "content": "hello from write tool"
+            }),
         )
         .await
         .unwrap();
@@ -121,14 +119,12 @@ mod tests {
         let params = InvocationParams::new(&ws.root, None);
         let denied = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
+            "write_file".into(),
             &params,
-            ToolRequest {
-                name: "write_file".into(),
-                payload: json!({
-                    "path": "hello.txt",
-                    "content": "blocked"
-                }),
-            },
+            json!({
+                "path": "hello.txt",
+                "content": "blocked"
+            }),
         )
         .await;
 

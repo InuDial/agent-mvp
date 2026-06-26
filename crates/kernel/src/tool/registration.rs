@@ -2,7 +2,8 @@ use super::adapter::{KernelToolAdapter, ToolAdapter};
 use crate::error::ToolError;
 use crate::kernel::Kernel;
 use crate::tool::ToolImpl;
-use mvp_contract::{ToolOutcome, ToolRequest, ToolSpec};
+use mvp_contract::{ToolOutcome, ToolSpec};
+use serde_json::Value;
 
 /// Kernel-owned metadata attached when a `ToolImpl` is accepted by `ToolPlane`.
 ///
@@ -69,8 +70,8 @@ impl<K: Kernel> RegisteredTool<K> {
     pub async fn invoke(
         &self,
         ctx: &K::ToolCx<'_>,
-        req: ToolRequest,
+        payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        self.adapter.invoke(ctx, req).await
+        self.adapter.invoke(ctx, payload).await
     }
 }

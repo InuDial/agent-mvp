@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use mvp_contract::{Capabilities, InvocationParams, ToolName, ToolOutcome, ToolRequest};
+use mvp_contract::{Capabilities, InvocationParams, ToolName, ToolOutcome};
 use mvp_kernel::service::fs::StdFs;
 use mvp_kernel::service::network::DenyNetwork;
 use mvp_kernel::{
@@ -18,6 +18,7 @@ use mvp_kernel::{
     },
     tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
 };
+use serde_json::Value;
 
 pub struct App {
     tools: BTreeMap<ToolName, RegisteredTool<App>>,
@@ -114,17 +115,17 @@ impl ToolContext<App> for AppToolContext<'_> {
 
     async fn invoke_tool(
         &self,
+        path: <App as Kernel>::ToolPath,
         capabilities_override: Option<Capabilities>,
-        req: ToolRequest,
+        payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        let child_tool = req.name.clone();
         let (effective_capabilities, attempted_expand) = match capabilities_override {
             Some(capabilities) => {
                 let attempted_expand = !self.effective_capabilities.contains(capabilities);
                 if attempted_expand {
                     audit::record_nested_capability_override(
                         self.registration,
-                        &child_tool,
+                        &path,
                         self.effective_capabilities,
                         Some(capabilities),
                         None,
@@ -141,7 +142,7 @@ impl ToolContext<App> for AppToolContext<'_> {
 
         audit::record_nested_capability_override(
             self.registration,
-            &child_tool,
+            &path,
             self.effective_capabilities,
             capabilities_override,
             Some(effective_capabilities),
@@ -149,7 +150,7 @@ impl ToolContext<App> for AppToolContext<'_> {
         );
 
         let params = InvocationParams::new(self.workspace_root(), Some(effective_capabilities));
-        self.app.invoke(&params, req).await
+        self.app.invoke(path, &params, payload).await
     }
 }
 
@@ -160,6 +161,8 @@ impl Kernel for App {
         = PolicyPlane<KernelPolicyContextFactory>
     where
         Self: 'a;
+
+    type ToolPath = String;
     type ToolCx<'a>
         = AppToolContext<'a>
     where
@@ -171,16 +174,17 @@ impl Kernel for App {
 
     async fn invoke(
         &self,
+        path: Self::ToolPath,
         params: &InvocationParams,
-        req: ToolRequest,
+        payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
         let registered = self
             .tools
-            .get(&req.name)
-            .ok_or_else(|| ToolError::UnknownTool(req.name.clone()))?;
+            .get(&path)
+            .ok_or_else(|| ToolError::UnknownTool(path.clone()))?;
         let ctx = AppToolContext::new(self, registered.registration(), params)
             .map_err(ToolError::Authorization)?;
-        registered.invoke(&ctx, req).await
+        registered.invoke(&ctx, payload).await
     }
 }
 
@@ -322,11 +326,9 @@ mod tests {
 
         let err = app
             .invoke(
+                "missing".into(),
                 &InvocationParams::new(&ws.root, None),
-                ToolRequest {
-                    name: "missing".into(),
-                    payload: json!({}),
-                },
+                json!({}),
             )
             .await;
 
@@ -344,11 +346,9 @@ mod tests {
 
         let outcome = app
             .invoke(
+                "read_workspace_file".into(),
                 &InvocationParams::new(&ws.root, None),
-                ToolRequest {
-                    name: "read_workspace_file".into(),
-                    payload: json!({ "path": "hello.txt" }),
-                },
+                json!({ "path": "hello.txt" }),
             )
             .await
             .unwrap();
@@ -368,11 +368,9 @@ mod tests {
 
         let err = app
             .invoke(
+                "read_workspace_file".into(),
                 &InvocationParams::new(&ws.root, Some(Capabilities::empty())),
-                ToolRequest {
-                    name: "read_workspace_file".into(),
-                    payload: json!({ "path": "hello.txt" }),
-                },
+                json!({ "path": "hello.txt" }),
             )
             .await;
 

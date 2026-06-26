@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use mvp_contract::{ToolOutcome, ToolRequest, ToolSpec};
+use mvp_contract::{ToolOutcome, ToolSpec};
 use mvp_kernel::error::{InputError, ToolError};
 use mvp_kernel::kernel::Kernel;
 use mvp_kernel::tool::{ToolContext, ToolImpl};
@@ -11,8 +11,9 @@ pub struct Double;
 impl<K> ToolImpl<K> for Double
 where
     K: Kernel,
+    K::ToolPath: Clone + From<String> + Send + 'static,
 {
-    type Input = ToolRequest;
+    type Input = (K::ToolPath, Value);
     type Output = ToolOutcome;
 
     fn spec(&self) -> ToolSpec {
@@ -34,7 +35,7 @@ where
             .cloned()
             .ok_or(InputError::MissingField("payload"))?;
 
-        Ok(ToolRequest { name, payload })
+        Ok((name.into(), payload))
     }
 
     async fn execute(
@@ -42,8 +43,10 @@ where
         ctx: &K::ToolCx<'_>,
         input: Self::Input,
     ) -> Result<Self::Output, ToolError> {
-        let _first = ctx.invoke_tool(None, input.clone()).await?;
-        let second = ctx.invoke_tool(None, input).await?;
+        let _first = ctx
+            .invoke_tool(input.0.clone(), None, input.1.clone())
+            .await?;
+        let second = ctx.invoke_tool(input.0, None, input.1).await?;
         Ok(second)
     }
 }
@@ -53,7 +56,7 @@ mod tests {
     use super::*;
     use crate::read_file::ReadFileTool;
     use mvp_contract::InvocationParams;
-    use mvp_contract::{Capabilities, Capability, OutputClassification, ToolRequest};
+    use mvp_contract::{Capabilities, Capability, OutputClassification};
     use mvp_kernel::{
         error::{AuthorizationError, ToolError},
         service::fs::AllowWorkspaceReadPolicy,
@@ -66,10 +69,10 @@ mod tests {
     #[async_trait]
     impl<K> ToolImpl<K> for EscalatingInvokeTool
     where
-        K: Kernel,
+        K: Kernel<ToolPath = String>,
         for<'a> K::ToolCx<'a>: ToolContext<K>,
     {
-        type Input = ToolRequest;
+        type Input = (K::ToolPath, Value);
         type Output = ToolOutcome;
 
         fn spec(&self) -> ToolSpec {
@@ -91,7 +94,7 @@ mod tests {
                 .cloned()
                 .ok_or(InputError::MissingField("payload"))?;
 
-            Ok(ToolRequest { name, payload })
+            Ok((name, payload))
         }
 
         async fn execute(
@@ -99,7 +102,7 @@ mod tests {
             ctx: &K::ToolCx<'_>,
             input: Self::Input,
         ) -> Result<Self::Output, ToolError> {
-            ctx.invoke_tool(Some([Capability::FsRead].into()), input)
+            ctx.invoke_tool(input.0, Some([Capability::FsRead].into()), input.1)
                 .await
         }
     }
@@ -117,14 +120,12 @@ mod tests {
         let params = InvocationParams::new(&ws.root, Some([Capability::FsRead].into()));
         let outcome = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
+            "double".into(),
             &params,
-            ToolRequest {
-                name: "double".into(),
-                payload: json!({
-                    "name": "read_file",
-                    "payload": { "path": "hello.txt" },
-                }),
-            },
+            json!({
+                "name": "read_file",
+                "payload": { "path": "hello.txt" },
+            }),
         )
         .await
         .unwrap();
@@ -146,14 +147,12 @@ mod tests {
         let params = InvocationParams::new(&ws.root, None);
         let denied = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
+            "escalate_invoke".into(),
             &params,
-            ToolRequest {
-                name: "escalate_invoke".into(),
-                payload: json!({
-                    "name": "read_file",
-                    "payload": { "path": "hello.txt" },
-                }),
-            },
+            json!({
+                "name": "read_file",
+                "payload": { "path": "hello.txt" },
+            }),
         )
         .await;
 

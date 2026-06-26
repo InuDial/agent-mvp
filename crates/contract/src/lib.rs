@@ -5,12 +5,6 @@ use std::path::{Path, PathBuf};
 pub type ToolName = String;
 pub type ToolDescription = String;
 
-#[derive(Clone, Debug)]
-pub struct ToolRequest {
-    pub name: ToolName,
-    pub payload: Value,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToolOutcome {
     pub payload: Value,

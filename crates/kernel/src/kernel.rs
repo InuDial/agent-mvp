@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use mvp_contract::{InvocationParams, ToolOutcome, ToolRequest};
+use mvp_contract::{InvocationParams, ToolOutcome};
+use serde_json::Value;
 
 use crate::{
     error::ToolError,
@@ -14,6 +15,7 @@ pub trait Kernel: Sync {
     where
         Self: 'a;
 
+    type ToolPath;
     type ToolCx<'a>: ToolContext<Self>
     where
         Self: 'a;
@@ -22,7 +24,8 @@ pub trait Kernel: Sync {
 
     async fn invoke(
         &self,
+        path: Self::ToolPath,
         params: &InvocationParams,
-        req: ToolRequest,
+        payload: Value,
     ) -> Result<ToolOutcome, ToolError>;
 }

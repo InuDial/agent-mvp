@@ -69,7 +69,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mvp_contract::{InvocationParams, ToolRequest};
+    use mvp_contract::InvocationParams;
     use mvp_kernel::{
         service::fs::AllowWorkspaceReadPolicy,
         test_support::{MockKernel, TempWorkspace},
@@ -87,11 +87,9 @@ mod tests {
         let params = InvocationParams::new(&ws.root, None);
         let outcome = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
+            "read_file".into(),
             &params,
-            ToolRequest {
-                name: "read_file".into(),
-                payload: json!({ "path": "hello.txt" }),
-            },
+            json!({ "path": "hello.txt" }),
         )
         .await
         .unwrap();

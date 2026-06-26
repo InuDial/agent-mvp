@@ -92,7 +92,8 @@ mod tests {
     use crate::test_utils::{TempWorkspace, registration};
     use crate::tool::ToolContext;
     use async_trait::async_trait;
-    use mvp_contract::{Capabilities, Capability, InvocationParams, ToolOutcome, ToolRequest};
+    use mvp_contract::{Capabilities, Capability, InvocationParams, ToolOutcome};
+    use serde_json::Value;
 
     struct UnusedToolContext<'a> {
         kernel: &'a TestKernel,
@@ -125,8 +126,9 @@ mod tests {
 
         async fn invoke_tool(
             &self,
+            _path: <TestKernel as Kernel>::ToolPath,
             _capabilities_override: Option<Capabilities>,
-            _req: ToolRequest,
+            _payload: Value,
         ) -> Result<ToolOutcome, ToolError> {
             panic!("unused in network service tests")
         }
@@ -158,6 +160,8 @@ mod tests {
             = PolicyPlane<KernelPolicyContextFactory>
         where
             Self: 'a;
+
+        type ToolPath = String;
         type ToolCx<'a>
             = UnusedToolContext<'a>
         where
@@ -169,8 +173,9 @@ mod tests {
 
         async fn invoke(
             &self,
+            _path: Self::ToolPath,
             _params: &InvocationParams,
-            _req: ToolRequest,
+            _payload: Value,
         ) -> Result<ToolOutcome, ToolError> {
             panic!("unused in network service tests")
         }

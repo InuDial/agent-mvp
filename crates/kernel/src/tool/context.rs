@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use async_trait::async_trait;
-use mvp_contract::{Capabilities, ToolOutcome, ToolRequest};
+use mvp_contract::{Capabilities, ToolOutcome};
+use serde_json::Value;
 
 use crate::{error::ToolError, kernel::Kernel, policy::PolicyContextFactory};
 
@@ -15,7 +16,8 @@ pub trait ToolContext<K: Kernel + ?Sized>: Sync {
 
     async fn invoke_tool(
         &self,
+        path: K::ToolPath,
         capabilities_override: Option<Capabilities>,
-        req: ToolRequest,
+        payload: Value,
     ) -> Result<ToolOutcome, ToolError>;
 }

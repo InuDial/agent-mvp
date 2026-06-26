@@ -30,7 +30,7 @@ crates/demo       Small end-to-end executable
 
 ```mermaid
 flowchart TD
-    Host[Host / caller] -->|ToolRequest + InvocationParams| Invocation[Invocation]
+    Host[Host / caller] -->|ToolPath + payload + InvocationParams| Invocation[Invocation]
     Invocation -->|per-call runtime state| Context[ToolContext]
     Context -->|input + effective capabilities| Tool[ToolImpl]
     Tool -->|service call| Service[Service facade]
@@ -44,7 +44,8 @@ flowchart TD
 
 The logical architecture is about runtime responsibility:
 
-- **Host / caller** supplies `ToolRequest` and `InvocationParams`.
+- **Host / caller** supplies the target tool path, JSON payload, and
+  `InvocationParams`.
 - **Invocation** resolves the target tool and creates the per-call context.
 - **Tool context** carries workspace root, effective capabilities, services, and
   nested invocation.
@@ -84,7 +85,6 @@ tools that can run on that kernel-facing abstraction. `demo` composes the pieces
 
 `mvp-contract` defines the shared protocol surface:
 
-- `ToolRequest`
 - `ToolOutcome`
 - `ToolSpec`
 - `Capability` / `Capabilities`
