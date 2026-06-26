@@ -119,7 +119,7 @@ impl ToolContext<App> for AppToolContext<'_> {
         capabilities_override: Option<Capabilities>,
         payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        let (effective_capabilities, attempted_expand) = match capabilities_override {
+        let effective_capabilities = match capabilities_override {
             Some(capabilities) => {
                 let attempted_expand = !self.effective_capabilities.contains(capabilities);
                 if attempted_expand {
@@ -135,19 +135,10 @@ impl ToolContext<App> for AppToolContext<'_> {
                         "nested invocation attempted to expand capabilities".into(),
                     )));
                 }
-                (capabilities, false)
+                capabilities
             }
-            None => (self.effective_capabilities, false),
+            None => self.effective_capabilities,
         };
-
-        audit::record_nested_capability_override(
-            self.registration,
-            &path,
-            self.effective_capabilities,
-            capabilities_override,
-            Some(effective_capabilities),
-            attempted_expand,
-        );
 
         let params = InvocationParams::new(self.workspace_root(), Some(effective_capabilities));
         self.app.invoke(path, &params, payload).await
@@ -182,8 +173,10 @@ impl Kernel for App {
             .tools
             .get(&path)
             .ok_or_else(|| ToolError::UnknownTool(path.clone()))?;
-        let ctx = AppToolContext::new(self, registered.registration(), params)
-            .map_err(ToolError::Authorization)?;
+        let registration = registered.registration();
+        let ctx =
+            AppToolContext::new(self, registration, params).map_err(ToolError::Authorization)?;
+
         registered.invoke(&ctx, payload).await
     }
 }
