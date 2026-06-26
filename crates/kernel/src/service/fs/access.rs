@@ -58,7 +58,7 @@ impl ExecutableAction for FsReadAction {
         Self: 'a,
     {
         Box::pin(async move {
-            fs.read_canonical(&granted.action.path)
+            fs.read_canonical(&granted.action().path)
                 .await
                 .map_err(ExecutionError::Capability)
         })
@@ -77,7 +77,7 @@ impl ExecutableAction for FsWriteAction {
         Self: 'a,
     {
         Box::pin(async move {
-            fs.write_canonical(&granted.action.path, &granted.action.content)
+            fs.write_canonical(&granted.action().path, &granted.action().content)
                 .await
                 .map_err(ExecutionError::Capability)
         })

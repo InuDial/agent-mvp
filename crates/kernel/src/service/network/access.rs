@@ -57,7 +57,7 @@ impl ExecutableAction for NetworkFetchAction {
     {
         Box::pin(async move {
             network
-                .fetch_url(&granted.action.url)
+                .fetch_url(&granted.action().url)
                 .await
                 .map_err(ExecutionError::Capability)
         })

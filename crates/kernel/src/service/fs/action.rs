@@ -127,7 +127,7 @@ pub struct FsReadAction {
 impl FsReadAction {
     pub(crate) fn new(parent: Granted<FsAction>) -> Self {
         Self {
-            path: parent.action.path,
+            path: parent.into_action().path,
         }
     }
 }
@@ -155,7 +155,7 @@ pub struct FsWriteAction {
 impl FsWriteAction {
     pub(crate) fn new(parent: Granted<FsAction>, content: String) -> Self {
         Self {
-            path: parent.action.path,
+            path: parent.into_action().path,
             content,
         }
     }

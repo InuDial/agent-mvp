@@ -201,7 +201,7 @@ where
                                 reason,
                             );
                             audit::record_grant(&record);
-                            return Ok(Granted { grant_id, action });
+                            return Ok(Granted::new(grant_id, action));
                         }
                         PolicyDecision::Deny => {
                             let reason = reason.unwrap_or_else(|| "policy denied action".into());
@@ -243,7 +243,7 @@ where
                             reason,
                         );
                         audit::record_grant(&record);
-                        return Ok(Granted { grant_id, action });
+                        return Ok(Granted::new(grant_id, action));
                     }
                     PolicyDecision::Deny => {
                         let reason = reason.unwrap_or_else(|| "policy denied action".into());

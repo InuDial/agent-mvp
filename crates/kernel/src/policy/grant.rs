@@ -92,8 +92,26 @@ impl GrantRecord {
 }
 
 pub struct Granted<A> {
-    pub grant_id: GrantId,
-    pub action: A,
+    grant_id: GrantId,
+    action: A,
+}
+
+impl<A> Granted<A> {
+    pub(crate) fn new(grant_id: GrantId, action: A) -> Self {
+        Self { grant_id, action }
+    }
+
+    pub fn grant_id(&self) -> GrantId {
+        self.grant_id
+    }
+
+    pub fn action(&self) -> &A {
+        &self.action
+    }
+
+    pub fn into_action(self) -> A {
+        self.action
+    }
 }
 
 impl<A> Granted<A>
