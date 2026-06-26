@@ -137,7 +137,7 @@ boundary.
 - tool registration and invocation adapters
 - `Action` and `Granted<Action>` authorization flow
 - inbound, typed, and outbound policy evaluation
-- filesystem and network service facades
+- service facades, such as filesystem and network
 - structured audit helpers
 - canonical filesystem path types
 
@@ -298,11 +298,11 @@ This repository does not claim to be a finished security system.
 
 Known MVP boundaries:
 
-- tool-to-tool invocation is not yet modeled as its own action/capability
 - only filesystem and network service examples are fleshed out
 - URL handling is intentionally simple
 - `ToolOutcome.classification` exists in the contract but is not enforced as an
   output authorization boundary
+- only tools are included in this kernel
 
 The design value is the separation between tool intent, semantic actions, policy
 decisions, effective authority, service execution, and audit.
