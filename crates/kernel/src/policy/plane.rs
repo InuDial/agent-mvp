@@ -104,10 +104,10 @@ where
 }
 
 /// Minimal permissive fallback used by the current MVP tool plane.
-pub struct DefaultAllowPolicy;
+pub struct AllowAllPolicy;
 
 #[async_trait]
-impl<F: PolicyContextFactory> PolicyAny<F> for DefaultAllowPolicy {
+impl<F: PolicyContextFactory> PolicyAny<F> for AllowAllPolicy {
     fn name(&self) -> &'static str {
         "policy.default_allow"
     }
