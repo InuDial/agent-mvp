@@ -121,8 +121,8 @@ impl MontySessionStore for MemoryMontySessionStore {
 #[derive(Clone, Debug)]
 pub struct MontyTool {
     name: String,
-    exposed_tools: BTreeMap<String, String>,
-    os_tool: String,
+    exposed_tools: BTreeMap<String, Value>,
+    os_tool: Value,
     limits: ResourceLimits,
 }
 
@@ -160,7 +160,7 @@ impl MontyTool {
         Self {
             name: DEFAULT_TOOL_NAME.into(),
             exposed_tools: BTreeMap::new(),
-            os_tool: DEFAULT_OS_TOOL_NAME.into(),
+            os_tool: Value::String(DEFAULT_OS_TOOL_NAME.into()),
             limits: ResourceLimits::new(),
         }
     }
@@ -172,15 +172,15 @@ impl MontyTool {
     }
 
     #[must_use]
-    pub fn expose(mut self, monty_name: impl Into<String>, tool_name: impl Into<String>) -> Self {
+    pub fn expose(mut self, monty_name: impl Into<String>, tool_path: impl Into<Value>) -> Self {
         self.exposed_tools
-            .insert(monty_name.into(), tool_name.into());
+            .insert(monty_name.into(), tool_path.into());
         self
     }
 
     #[must_use]
-    pub fn os_tool(mut self, tool_name: impl Into<String>) -> Self {
-        self.os_tool = tool_name.into();
+    pub fn os_tool(mut self, tool_path: impl Into<Value>) -> Self {
+        self.os_tool = tool_path.into();
         self
     }
 
@@ -198,7 +198,6 @@ impl MontyTool {
     ) -> Result<MontyStepOutput, ToolError>
     where
         K: Kernel,
-        K::ToolPath: From<String>,
     {
         let mut classification = OutputClassification::Public;
         let mut progress = repl
@@ -237,12 +236,14 @@ impl MontyTool {
                         )
                         .map_err(monty_start_error_to_tool_error)?
                     } else {
-                        let resume_result = if let Some(tool_name) =
+                        let resume_result = if let Some(tool_path) =
                             self.exposed_tools.get(&call.function_name).cloned()
                         {
                             match monty_tool_payload(&call.args, &call.kwargs) {
-                                Ok(payload) => {
-                                    match ctx.invoke_tool(tool_name.into(), None, payload).await {
+                                Ok(payload) => match K::decode_tool_path(&tool_path)
+                                    .map_err(ToolError::InvalidInput)
+                                {
+                                    Ok(path) => match ctx.invoke_tool(path, None, payload).await {
                                         Ok(outcome) => {
                                             merge_classification(
                                                 &mut classification,
@@ -265,8 +266,12 @@ impl MontyTool {
                                             ExtFunctionResult::Error(tool_error_to_monty(error)),
                                             PrintWriter::Disabled,
                                         ),
-                                    }
-                                }
+                                    },
+                                    Err(error) => call.resume(
+                                        ExtFunctionResult::Error(tool_error_to_monty(error)),
+                                        PrintWriter::Disabled,
+                                    ),
+                                },
                                 Err(error) => call.resume(
                                     ExtFunctionResult::Error(tool_error_to_monty(error)),
                                     PrintWriter::Disabled,
@@ -293,23 +298,26 @@ impl MontyTool {
                         "kwargs": monty_kwargs_to_json(&kwargs)?,
                     });
 
-                    match ctx
-                        .invoke_tool(self.os_tool.clone().into(), None, payload)
-                        .await
-                    {
-                        Ok(outcome) => {
-                            merge_classification(&mut classification, outcome.classification);
-                            match json_to_monty(outcome.payload) {
-                                Ok(value) => call.resume(
-                                    ExtFunctionResult::Return(value),
-                                    PrintWriter::Disabled,
-                                ),
-                                Err(error) => call.resume(
-                                    ExtFunctionResult::Error(tool_error_to_monty(error)),
-                                    PrintWriter::Disabled,
-                                ),
+                    match K::decode_tool_path(&self.os_tool).map_err(ToolError::InvalidInput) {
+                        Ok(path) => match ctx.invoke_tool(path, None, payload).await {
+                            Ok(outcome) => {
+                                merge_classification(&mut classification, outcome.classification);
+                                match json_to_monty(outcome.payload) {
+                                    Ok(value) => call.resume(
+                                        ExtFunctionResult::Return(value),
+                                        PrintWriter::Disabled,
+                                    ),
+                                    Err(error) => call.resume(
+                                        ExtFunctionResult::Error(tool_error_to_monty(error)),
+                                        PrintWriter::Disabled,
+                                    ),
+                                }
                             }
-                        }
+                            Err(error) => call.resume(
+                                ExtFunctionResult::Error(tool_error_to_monty(error)),
+                                PrintWriter::Disabled,
+                            ),
+                        },
                         Err(error) => call.resume(
                             ExtFunctionResult::Error(tool_error_to_monty(error)),
                             PrintWriter::Disabled,
@@ -332,7 +340,6 @@ impl MontyTool {
 impl<K> ToolImpl<K> for MontyTool
 where
     K: Kernel + HasMontySessionStore,
-    K::ToolPath: From<String>,
     for<'a> K::ToolCx<'a>: HasMontySessionService<K>,
 {
     type Input = MontyInput;
@@ -700,13 +707,17 @@ mod tests {
             }
         }
 
-        fn register<T: ToolImpl<Self>>(&mut self, tool: T) -> Result<(), ToolError> {
-            let registered = RegisteredTool::from_tool(tool)?;
-            let name = registered.spec().name.clone();
-            if self.tools.contains_key(&name) {
-                return Err(ToolError::DuplicateTool(name));
+        fn register<T: ToolImpl<Self>>(
+            &mut self,
+            path: <Self as Kernel>::ToolPath,
+            tool: T,
+        ) -> Result<(), ToolError> {
+            if self.tools.contains_key(&path) {
+                return Err(ToolError::DuplicateTool(format!("{path:?}")));
             }
-            self.tools.insert(name, registered);
+
+            let registered = RegisteredTool::from_tool(tool)?;
+            self.tools.insert(path, registered);
             Ok(())
         }
     }
@@ -725,6 +736,7 @@ mod tests {
 
     struct TestToolContext<'a> {
         kernel: &'a TestKernel,
+        tool_path: &'a <TestKernel as Kernel>::ToolPath,
         registration: &'a ToolRegistration,
         effective_capabilities: Capabilities,
         canonical_workspace_root: CanonicalRoot,
@@ -733,6 +745,7 @@ mod tests {
     impl<'a> TestToolContext<'a> {
         fn new(
             kernel: &'a TestKernel,
+            tool_path: &'a <TestKernel as Kernel>::ToolPath,
             registration: &'a ToolRegistration,
             params: &'a InvocationParams,
         ) -> Result<Self, AuthorizationError> {
@@ -745,6 +758,7 @@ mod tests {
 
             Ok(Self {
                 kernel,
+                tool_path,
                 registration,
                 effective_capabilities,
                 canonical_workspace_root,
@@ -760,6 +774,10 @@ mod tests {
 
         fn effective_capabilities(&self) -> Capabilities {
             self.effective_capabilities
+        }
+
+        fn tool_path(&self) -> &<TestKernel as Kernel>::ToolPath {
+            self.tool_path
         }
 
         fn registration(&self) -> &ToolRegistration {
@@ -781,6 +799,7 @@ mod tests {
                     let attempted_expand = !self.effective_capabilities.contains(capabilities);
                     if attempted_expand {
                         audit::record_nested_capability_override(
+                            self.tool_path,
                             self.registration,
                             &path,
                             self.effective_capabilities,
@@ -798,6 +817,7 @@ mod tests {
             };
 
             audit::record_nested_capability_override(
+                self.tool_path,
                 self.registration,
                 &path,
                 self.effective_capabilities,
@@ -807,7 +827,7 @@ mod tests {
             );
 
             let params = InvocationParams::new(self.workspace_root(), Some(effective_capabilities));
-            self.kernel.invoke(path, &params, payload).await
+            self.kernel.invoke(&path, &params, payload).await
         }
     }
 
@@ -841,18 +861,26 @@ mod tests {
             &self.policy
         }
 
+        fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, InputError> {
+            value
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or(InputError::InvalidField("tool_path"))
+        }
+
         async fn invoke(
             &self,
-            path: Self::ToolPath,
+            path: &Self::ToolPath,
             params: &InvocationParams,
             payload: Value,
         ) -> Result<ToolOutcome, ToolError> {
-            let registered = self
+            let (registered_path, registered) = self
                 .tools
-                .get(&path)
-                .ok_or_else(|| ToolError::UnknownTool(path.clone()))?;
-            let ctx = TestToolContext::new(self, registered.registration(), params)
-                .map_err(ToolError::Authorization)?;
+                .get_key_value(path)
+                .ok_or_else(|| ToolError::UnknownTool(format!("{path:?}")))?;
+            let ctx =
+                TestToolContext::new(self, registered_path, registered.registration(), params)
+                    .map_err(ToolError::Authorization)?;
             registered.invoke(&ctx, payload).await
         }
     }
@@ -895,14 +923,17 @@ mod tests {
     async fn monty_function_call_invokes_exposed_tool() {
         let mut kernel = TestKernel::new();
         kernel
-            .register(MontyTool::new().expose("echo", "echo"))
+            .register(
+                DEFAULT_TOOL_NAME.to_owned(),
+                MontyTool::new().expose("echo", "echo"),
+            )
             .unwrap();
-        kernel.register(EchoTool).unwrap();
+        kernel.register("echo".to_owned(), EchoTool).unwrap();
 
         let params = InvocationParams::new(std::env::temp_dir(), Some([Capability::FsRead].into()));
         let outcome = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
-            DEFAULT_TOOL_NAME.into(),
+            &DEFAULT_TOOL_NAME.to_string(),
             &params,
             json!({
                 "code": "echo({'message': 'hello from monty'})",
@@ -919,12 +950,14 @@ mod tests {
     #[tokio::test]
     async fn monty_session_store_preserves_repl_state() {
         let mut kernel = TestKernel::new();
-        kernel.register(MontyTool::new()).unwrap();
+        kernel
+            .register(DEFAULT_TOOL_NAME.to_owned(), MontyTool::new())
+            .unwrap();
 
         let params = InvocationParams::new(std::env::temp_dir(), None);
         let first = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
-            DEFAULT_TOOL_NAME.into(),
+            &DEFAULT_TOOL_NAME.to_string(),
             &params,
             json!({
                 "session_id": "agent-main",
@@ -937,7 +970,7 @@ mod tests {
 
         let second = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
-            DEFAULT_TOOL_NAME.into(),
+            &DEFAULT_TOOL_NAME.to_string(),
             &params,
             json!({
                 "session_id": "agent-main",
@@ -956,15 +989,19 @@ mod tests {
         std::fs::write(ws.root.join("hello.txt"), "hello through os call").unwrap();
 
         let mut kernel = TestKernel::new();
-        kernel.register(MontyTool::new()).unwrap();
-        kernel.register(MontyOsTool).unwrap();
+        kernel
+            .register(DEFAULT_TOOL_NAME.to_owned(), MontyTool::new())
+            .unwrap();
+        kernel
+            .register(DEFAULT_OS_TOOL_NAME.to_owned(), MontyOsTool)
+            .unwrap();
         kernel.policy.append(AllowWorkspaceFsPolicy);
         kernel.policy.append(AllowWorkspaceReadPolicy);
 
         let params = InvocationParams::new(&ws.root, Some([Capability::FsRead].into()));
         let outcome = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
-            DEFAULT_TOOL_NAME.into(),
+            &DEFAULT_TOOL_NAME.to_string(),
             &params,
             json!({
                 "code": "from pathlib import Path\nPath('hello.txt').read_text()",

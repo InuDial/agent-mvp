@@ -11,7 +11,6 @@ pub struct Double;
 impl<K> ToolImpl<K> for Double
 where
     K: Kernel,
-    K::ToolPath: Clone + From<String> + Send + 'static,
 {
     type Input = (K::ToolPath, Value);
     type Output = ToolOutcome;
@@ -25,17 +24,16 @@ where
     }
 
     fn parse_input(&self, payload: Value) -> Result<Self::Input, InputError> {
-        let name = payload
-            .get("name")
-            .and_then(Value::as_str)
-            .ok_or(InputError::MissingField("name"))?
-            .to_owned();
+        let path_value = payload
+            .get("path")
+            .ok_or(InputError::MissingField("path"))?;
+        let path = K::decode_tool_path(path_value)?;
         let payload = payload
             .get("payload")
             .cloned()
             .ok_or(InputError::MissingField("payload"))?;
 
-        Ok((name.into(), payload))
+        Ok((path, payload))
     }
 
     async fn execute(
@@ -113,17 +111,19 @@ mod tests {
         std::fs::write(ws.root.join("hello.txt"), "hello through double").unwrap();
 
         let mut kernel = MockKernel::new();
-        kernel.register(Double).unwrap();
-        kernel.register(ReadFileTool).unwrap();
+        kernel.register("double".to_owned(), Double).unwrap();
+        kernel
+            .register("read_file".to_owned(), ReadFileTool)
+            .unwrap();
         kernel.policy.append(AllowWorkspaceReadPolicy);
 
         let params = InvocationParams::new(&ws.root, Some([Capability::FsRead].into()));
         let outcome = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
-            "double".into(),
+            &"double".to_string(),
             &params,
             json!({
-                "name": "read_file",
+                "path": "read_file",
                 "payload": { "path": "hello.txt" },
             }),
         )
@@ -140,14 +140,18 @@ mod tests {
         std::fs::write(ws.root.join("hello.txt"), "blocked").unwrap();
 
         let mut kernel = MockKernel::new();
-        kernel.register(EscalatingInvokeTool).unwrap();
-        kernel.register(ReadFileTool).unwrap();
+        kernel
+            .register("escalate_invoke".to_owned(), EscalatingInvokeTool)
+            .unwrap();
+        kernel
+            .register("read_file".to_owned(), ReadFileTool)
+            .unwrap();
         kernel.policy.append(AllowWorkspaceReadPolicy);
 
         let params = InvocationParams::new(&ws.root, None);
         let denied = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
-            "escalate_invoke".into(),
+            &"escalate_invoke".to_string(),
             &params,
             json!({
                 "name": "read_file",

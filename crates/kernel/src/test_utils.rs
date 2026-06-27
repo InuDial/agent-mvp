@@ -15,7 +15,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use mvp_contract::{Capabilities, InvocationParams, ToolName, ToolOutcome, ToolSpec};
+use mvp_contract::{Capabilities, InvocationParams, ToolOutcome, ToolSpec};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -72,7 +72,7 @@ pub fn registration(capabilities: Capabilities) -> ToolRegistration {
 }
 
 pub struct MockKernel {
-    tools: BTreeMap<ToolName, RegisteredTool<MockKernel>>,
+    tools: BTreeMap<String, RegisteredTool<MockKernel>>,
     fs: StdFsBackend,
     network: StaticNetworkBackend,
     pub policy: PolicyPlane<KernelPolicyContextFactory>,
@@ -99,13 +99,17 @@ impl MockKernel {
         }
     }
 
-    pub fn register<T: ToolImpl<Self>>(&mut self, tool: T) -> Result<(), ToolError> {
-        let registered = RegisteredTool::from_tool(tool)?;
-        let name = registered.spec().name.clone();
-        if self.tools.contains_key(&name) {
-            return Err(ToolError::DuplicateTool(name));
+    pub fn register<T: ToolImpl<Self>>(
+        &mut self,
+        path: <Self as Kernel>::ToolPath,
+        tool: T,
+    ) -> Result<(), ToolError> {
+        if self.tools.contains_key(&path) {
+            return Err(ToolError::DuplicateTool(format!("{path:?}")));
         }
-        self.tools.insert(name, registered);
+
+        let registered = RegisteredTool::from_tool(tool)?;
+        self.tools.insert(path, registered);
         Ok(())
     }
 }
@@ -130,6 +134,7 @@ impl HasNetworkBackend for MockKernel {
 
 pub struct MockToolContext<'a> {
     kernel: &'a MockKernel,
+    tool_path: &'a <MockKernel as Kernel>::ToolPath,
     registration: &'a ToolRegistration,
     effective_capabilities: Capabilities,
     canonical_workspace_root: CanonicalRoot,
@@ -138,6 +143,7 @@ pub struct MockToolContext<'a> {
 impl<'a> MockToolContext<'a> {
     fn new(
         kernel: &'a MockKernel,
+        tool_path: &'a <MockKernel as Kernel>::ToolPath,
         registration: &'a ToolRegistration,
         params: &'a InvocationParams,
     ) -> Result<Self, AuthorizationError> {
@@ -150,6 +156,7 @@ impl<'a> MockToolContext<'a> {
 
         Ok(Self {
             kernel,
+            tool_path,
             registration,
             effective_capabilities,
             canonical_workspace_root,
@@ -165,6 +172,10 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
 
     fn effective_capabilities(&self) -> Capabilities {
         self.effective_capabilities
+    }
+
+    fn tool_path(&self) -> &<MockKernel as Kernel>::ToolPath {
+        self.tool_path
     }
 
     fn registration(&self) -> &ToolRegistration {
@@ -186,6 +197,7 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
                 let attempted_expand = !self.effective_capabilities.contains(capabilities);
                 if attempted_expand {
                     audit::record_nested_capability_override(
+                        self.tool_path,
                         self.registration,
                         &path,
                         self.effective_capabilities,
@@ -203,6 +215,7 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
         };
 
         audit::record_nested_capability_override(
+            self.tool_path,
             self.registration,
             &path,
             self.effective_capabilities,
@@ -212,7 +225,7 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
         );
 
         let params = InvocationParams::new(self.workspace_root(), Some(effective_capabilities));
-        self.kernel.invoke(path, &params, payload).await
+        self.kernel.invoke(&path, &params, payload).await
     }
 }
 
@@ -245,17 +258,24 @@ impl Kernel for MockKernel {
         &self.policy
     }
 
+    fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, crate::error::InputError> {
+        value
+            .as_str()
+            .map(ToOwned::to_owned)
+            .ok_or(crate::error::InputError::InvalidField("tool_path"))
+    }
+
     async fn invoke(
         &self,
-        path: Self::ToolPath,
+        path: &Self::ToolPath,
         params: &InvocationParams,
         payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        let registered = self
+        let (registered_path, registered) = self
             .tools
-            .get(&path)
-            .ok_or_else(|| ToolError::UnknownTool(path.clone()))?;
-        let ctx = MockToolContext::new(self, registered.registration(), params)
+            .get_key_value(path)
+            .ok_or_else(|| ToolError::UnknownTool(format!("{path:?}")))?;
+        let ctx = MockToolContext::new(self, registered_path, registered.registration(), params)
             .map_err(ToolError::Authorization)?;
         registered.invoke(&ctx, payload).await
     }

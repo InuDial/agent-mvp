@@ -1,9 +1,9 @@
-use mvp_contract::{Capability, ToolName};
+use mvp_contract::Capability;
 
 #[derive(Debug)]
 pub enum ToolError {
-    UnknownTool(ToolName),
-    DuplicateTool(ToolName),
+    UnknownTool(String),
+    DuplicateTool(String),
     InvalidSpec,
     InvalidInput(InputError),
     Authorization(AuthorizationError),

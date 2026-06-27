@@ -86,13 +86,15 @@ mod tests {
         std::fs::create_dir_all(ws.root.join("nested")).unwrap();
 
         let mut kernel = MockKernel::new();
-        kernel.register(WriteFileTool).unwrap();
+        kernel
+            .register("write_file".to_owned(), WriteFileTool)
+            .unwrap();
         kernel.policy.append(AllowWorkspaceWritePolicy);
 
         let params = InvocationParams::new(&ws.root, None);
         let outcome = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
-            "write_file".into(),
+            &"write_file".to_string(),
             &params,
             json!({
                 "path": "nested/hello.txt",
@@ -115,12 +117,14 @@ mod tests {
         let ws = TempWorkspace::with_prefix("builtin-write-file-denied");
 
         let mut kernel = MockKernel::new();
-        kernel.register(WriteFileTool).unwrap();
+        kernel
+            .register("write_file".to_owned(), WriteFileTool)
+            .unwrap();
 
         let params = InvocationParams::new(&ws.root, None);
         let denied = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
-            "write_file".into(),
+            &"write_file".to_string(),
             &params,
             json!({
                 "path": "hello.txt",

@@ -110,6 +110,7 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::error::{AuthorizationError, ToolError};
     use crate::kernel::Kernel;
@@ -124,6 +125,7 @@ mod tests {
 
     struct UnusedToolContext<'a> {
         kernel: &'a TestKernel,
+        tool_path: String,
         registration: &'a crate::tool::ToolRegistration,
         effective_capabilities: Capabilities,
         workspace_root: CanonicalRoot,
@@ -137,6 +139,10 @@ mod tests {
 
         fn effective_capabilities(&self) -> Capabilities {
             self.effective_capabilities
+        }
+
+        fn tool_path(&self) -> &<TestKernel as Kernel>::ToolPath {
+            &self.tool_path
         }
 
         fn registration(&self) -> &crate::tool::ToolRegistration {
@@ -204,9 +210,16 @@ mod tests {
             &self.policy
         }
 
+        fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, crate::error::InputError> {
+            value
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or(crate::error::InputError::InvalidField("tool_path"))
+        }
+
         async fn invoke(
             &self,
-            _path: Self::ToolPath,
+            _path: &Self::ToolPath,
             _params: &InvocationParams,
             _payload: Value,
         ) -> Result<ToolOutcome, ToolError> {
@@ -223,6 +236,7 @@ mod tests {
     ) -> UnusedToolContext<'a> {
         UnusedToolContext {
             kernel,
+            tool_path: "test_tool".to_owned(),
             registration,
             effective_capabilities,
             workspace_root: CanonicalRoot::existing(&params.workspace_root).unwrap(),

@@ -5,6 +5,8 @@
 //! denied, or abstained without making every intermediate decision part of the
 //! default audit stream.
 
+use std::fmt::Debug;
+
 use tracing::{Span, debug, info, info_span, warn};
 
 use crate::action::AuditResource;
@@ -17,15 +19,17 @@ use mvp_contract::Capabilities;
 
 pub const AUDIT_TARGET: &str = "mvp::audit";
 
-pub fn tool_invocation_span(registration: &ToolRegistration) -> Span {
+pub fn tool_invocation_span<P: Debug>(tool_path: &P, registration: &ToolRegistration) -> Span {
     info_span!(
         target: AUDIT_TARGET,
         "tool.invoke",
-        tool = %registration.spec().name,
+        tool_path = ?tool_path,
+        tool_name = %registration.spec().name,
     )
 }
 
-pub(crate) fn record_tool_capabilities_override(
+pub(crate) fn record_tool_capabilities_override<P: Debug>(
+    tool_path: &P,
     registration: &ToolRegistration,
     declared_capabilities: Capabilities,
     effective_capabilities: Capabilities,
@@ -36,16 +40,18 @@ pub(crate) fn record_tool_capabilities_override(
         info!(
             target: AUDIT_TARGET,
             event = "tool.capabilities_overridden",
-            tool = %registration.spec().name,
+            tool_path = ?tool_path,
+            tool_name = %registration.spec().name,
             declared_capabilities = declared_capabilities.bits(),
             effective_capabilities = effective_capabilities.bits(),
         );
     }
 }
 
-pub fn record_nested_capability_override(
+pub fn record_nested_capability_override<P: Debug, C: Debug>(
+    parent_tool_path: &P,
     parent_registration: &ToolRegistration,
-    child_tool: &str,
+    child_tool_path: &C,
     parent_effective_capabilities: Capabilities,
     requested_capabilities_override: Option<Capabilities>,
     actual_child_capabilities: Option<Capabilities>,
@@ -60,8 +66,9 @@ pub fn record_nested_capability_override(
         warn!(
             target: AUDIT_TARGET,
             event = "nested_tool_scope",
-            parent_tool = %parent_registration.spec().name,
-            child_tool = %child_tool,
+            parent_tool_path = ?parent_tool_path,
+            parent_tool_name = %parent_registration.spec().name,
+            child_tool_path = ?child_tool_path,
             parent_effective_capabilities = parent_effective_capabilities.bits(),
             requested_capabilities_override = ?requested_capabilities_override,
             actual_child_capabilities = ?actual_child_capabilities,
@@ -71,8 +78,9 @@ pub fn record_nested_capability_override(
         info!(
             target: AUDIT_TARGET,
             event = "nested_tool_scope",
-            parent_tool = %parent_registration.spec().name,
-            child_tool = %child_tool,
+            parent_tool_path = ?parent_tool_path,
+            parent_tool_name = %parent_registration.spec().name,
+            child_tool_path = ?child_tool_path,
             parent_effective_capabilities = parent_effective_capabilities.bits(),
             requested_capabilities_override = ?requested_capabilities_override,
             actual_child_capabilities = ?actual_child_capabilities,

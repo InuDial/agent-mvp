@@ -10,6 +10,7 @@ use crate::{error::ToolError, kernel::Kernel, policy::PolicyContextFactory};
 pub trait ToolContext<K: Kernel + ?Sized>: Sync {
     fn policy_context(&self) -> <K::PolicyCxFactory as PolicyContextFactory>::Context<'_>;
     fn effective_capabilities(&self) -> Capabilities;
+    fn tool_path(&self) -> &K::ToolPath;
     fn registration(&self) -> &super::registration::ToolRegistration;
     fn workspace_root(&self) -> &Path;
 

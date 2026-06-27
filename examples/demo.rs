@@ -32,16 +32,18 @@ async fn main() {
     std::fs::create_dir_all(&root).unwrap();
 
     let mut app = App::new();
-    app.register(WriteFileTool).unwrap();
-    app.register(ReadFileTool).unwrap();
-    app.register(Double).unwrap();
+    app.register("write_file".to_owned(), WriteFileTool)
+        .unwrap();
+    app.register("read_file".to_owned(), ReadFileTool).unwrap();
+    app.register("double".to_owned(), Double).unwrap();
     app.register(
+        "monty".to_owned(),
         MontyTool::new()
             .expose("read_file", "read_file")
             .expose("write_file", "write_file"),
     )
     .unwrap();
-    app.register(MontyOsTool).unwrap();
+    app.register("monty_os".to_owned(), MontyOsTool).unwrap();
     app.policy.append(AllowWorkspaceFsPolicy);
     app.policy
         .append(AllowExactFileWritePolicy::new(root.join("hello.txt")));
@@ -50,7 +52,7 @@ async fn main() {
     let write_params = InvocationParams::new(&root, Some([Capability::FsWrite].into()));
     let write_outcome = app
         .invoke(
-            "write_file".into(),
+            &"write_file".to_string(),
             &write_params,
             json!({
                 "path": "hello.txt",
@@ -63,10 +65,10 @@ async fn main() {
     let read_params = InvocationParams::new(&root, Some([Capability::FsRead].into()));
     let read_outcome = app
         .invoke(
-            "double".into(),
+            &"double".to_string(),
             &read_params,
             json!({
-                "name": "read_file",
+                "path": "read_file",
                 "payload": { "path": "hello.txt" },
             }),
         )
@@ -75,10 +77,10 @@ async fn main() {
 
     let read_outcome_err = app
         .invoke(
-            "double".into(),
+            &"double".to_string(),
             &write_params,
             json!({
-                "name": "read_file",
+                "path": "read_file",
                 "payload": { "path": "hello.txt" },
             }),
         )
@@ -87,7 +89,7 @@ async fn main() {
 
     let monty_read_outcome = app
         .invoke(
-            "monty".into(),
+            &"monty".to_string(),
             &read_params,
             json!({
                 "session_id": "demo",

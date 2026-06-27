@@ -82,13 +82,15 @@ mod tests {
         std::fs::write(ws.root.join("hello.txt"), "hello from tool plane").unwrap();
 
         let mut kernel = MockKernel::new();
-        kernel.register(ReadFileTool).unwrap();
+        kernel
+            .register("read_file".to_owned(), ReadFileTool)
+            .unwrap();
         kernel.policy.append(AllowWorkspaceReadPolicy);
 
         let params = InvocationParams::new(&ws.root, None);
         let outcome = mvp_kernel::kernel::Kernel::invoke(
             &kernel,
-            "read_file".into(),
+            &"read_file".to_string(),
             &params,
             json!({ "path": "hello.txt" }),
         )

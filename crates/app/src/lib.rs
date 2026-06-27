@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use async_trait::async_trait;
-use mvp_contract::{Capabilities, InvocationParams, ToolName, ToolOutcome};
+use mvp_contract::{Capabilities, InvocationParams, ToolOutcome};
 use mvp_kernel::service::fs::StdFsBackend;
 use mvp_kernel::service::network::DenyNetworkBackend;
 use mvp_kernel::{
     audit,
-    error::{AuthorizationError, ToolError},
+    error::{AuthorizationError, InputError, ToolError},
     kernel::Kernel,
     policy::{
         CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
@@ -25,7 +25,7 @@ use mvp_monty_tool::{
 use serde_json::Value;
 
 pub struct App {
-    tools: BTreeMap<ToolName, RegisteredTool<App>>,
+    tools: BTreeMap<String, RegisteredTool<App>>,
     fs: StdFsBackend,
     network: DenyNetworkBackend,
     monty_sessions: MemoryMontySessionStore,
@@ -52,13 +52,17 @@ impl App {
         }
     }
 
-    pub fn register<T: ToolImpl<Self>>(&mut self, tool: T) -> Result<(), ToolError> {
-        let registered = RegisteredTool::from_tool(tool)?;
-        let name = registered.spec().name.clone();
-        if self.tools.contains_key(&name) {
-            return Err(ToolError::DuplicateTool(name));
+    pub fn register<T: ToolImpl<Self>>(
+        &mut self,
+        path: <Self as Kernel>::ToolPath,
+        tool: T,
+    ) -> Result<(), ToolError> {
+        if self.tools.contains_key(&path) {
+            return Err(ToolError::DuplicateTool(format!("{path:?}")));
         }
-        self.tools.insert(name, registered);
+
+        let registered = RegisteredTool::from_tool(tool)?;
+        self.tools.insert(path, registered);
         Ok(())
     }
 }
@@ -83,6 +87,7 @@ impl HasMontySessionStore for App {
 
 pub struct AppToolContext<'a> {
     app: &'a App,
+    tool_path: &'a <App as Kernel>::ToolPath,
     registration: &'a ToolRegistration,
     effective_capabilities: Capabilities,
     canonical_workspace_root: CanonicalRoot,
@@ -91,6 +96,7 @@ pub struct AppToolContext<'a> {
 impl<'a> AppToolContext<'a> {
     fn new(
         app: &'a App,
+        tool_path: &'a <App as Kernel>::ToolPath,
         registration: &'a ToolRegistration,
         params: &'a InvocationParams,
     ) -> Result<Self, AuthorizationError> {
@@ -103,6 +109,7 @@ impl<'a> AppToolContext<'a> {
 
         Ok(Self {
             app,
+            tool_path,
             registration,
             effective_capabilities,
             canonical_workspace_root,
@@ -119,6 +126,10 @@ impl ToolContext<App> for AppToolContext<'_> {
     fn effective_capabilities(&self) -> Capabilities {
         self.effective_capabilities
     }
+    fn tool_path(&self) -> &<App as Kernel>::ToolPath {
+        self.tool_path
+    }
+
     fn registration(&self) -> &ToolRegistration {
         self.registration
     }
@@ -137,6 +148,7 @@ impl ToolContext<App> for AppToolContext<'_> {
                 let attempted_expand = !self.effective_capabilities.contains(capabilities);
                 if attempted_expand {
                     audit::record_nested_capability_override(
+                        self.tool_path,
                         self.registration,
                         &path,
                         self.effective_capabilities,
@@ -153,8 +165,18 @@ impl ToolContext<App> for AppToolContext<'_> {
             None => self.effective_capabilities,
         };
 
+        audit::record_nested_capability_override(
+            self.tool_path,
+            self.registration,
+            &path,
+            self.effective_capabilities,
+            capabilities_override,
+            Some(effective_capabilities),
+            false,
+        );
+
         let params = InvocationParams::new(self.workspace_root(), Some(effective_capabilities));
-        self.app.invoke(path, &params, payload).await
+        self.app.invoke(&path, &params, payload).await
     }
 }
 
@@ -194,19 +216,26 @@ impl Kernel for App {
         &self.policy
     }
 
+    fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, InputError> {
+        value
+            .as_str()
+            .map(ToOwned::to_owned)
+            .ok_or(InputError::InvalidField("tool_path"))
+    }
+
     async fn invoke(
         &self,
-        path: Self::ToolPath,
+        path: &Self::ToolPath,
         params: &InvocationParams,
         payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        let registered = self
+        let (registered_path, registered) = self
             .tools
-            .get(&path)
-            .ok_or_else(|| ToolError::UnknownTool(path.clone()))?;
+            .get_key_value(path)
+            .ok_or_else(|| ToolError::UnknownTool(format!("{path:?}")))?;
         let registration = registered.registration();
-        let ctx =
-            AppToolContext::new(self, registration, params).map_err(ToolError::Authorization)?;
+        let ctx = AppToolContext::new(self, registered_path, registration, params)
+            .map_err(ToolError::Authorization)?;
 
         registered.invoke(&ctx, payload).await
     }
@@ -339,10 +368,10 @@ mod tests {
     #[test]
     fn register_rejects_duplicate_tool_names() {
         let mut app = App::new();
-        app.register(NoopTool).unwrap();
+        app.register("noop".to_owned(), NoopTool).unwrap();
 
-        let duplicate = app.register(NoopTool);
-        assert!(matches!(duplicate, Err(ToolError::DuplicateTool(name)) if name == "noop"));
+        let duplicate = app.register("noop".to_owned(), NoopTool);
+        assert!(matches!(duplicate, Err(ToolError::DuplicateTool(path)) if path == "\"noop\""));
     }
 
     #[tokio::test]
@@ -352,13 +381,13 @@ mod tests {
 
         let err = app
             .invoke(
-                "missing".into(),
+                &"missing".to_string(),
                 &InvocationParams::new(&ws.root, None),
                 json!({}),
             )
             .await;
 
-        assert!(matches!(err, Err(ToolError::UnknownTool(name)) if name == "missing"));
+        assert!(matches!(err, Err(ToolError::UnknownTool(path)) if path == "\"missing\""));
     }
 
     #[tokio::test]
@@ -367,13 +396,14 @@ mod tests {
         std::fs::write(ws.root.join("hello.txt"), "hello from app").unwrap();
 
         let mut app = App::new();
-        app.register(ReadWorkspaceFileTool).unwrap();
+        app.register("read_workspace_file".to_owned(), ReadWorkspaceFileTool)
+            .unwrap();
         app.policy.append(AllowWorkspaceFsPolicy);
         app.policy.append(AllowWorkspaceReadPolicy);
 
         let outcome = app
             .invoke(
-                "read_workspace_file".into(),
+                &"read_workspace_file".to_string(),
                 &InvocationParams::new(&ws.root, None),
                 json!({ "path": "hello.txt" }),
             )
@@ -390,13 +420,14 @@ mod tests {
         std::fs::write(ws.root.join("hello.txt"), "blocked by envelope").unwrap();
 
         let mut app = App::new();
-        app.register(ReadWorkspaceFileTool).unwrap();
+        app.register("read_workspace_file".to_owned(), ReadWorkspaceFileTool)
+            .unwrap();
         app.policy.append(AllowWorkspaceFsPolicy);
         app.policy.append(AllowWorkspaceReadPolicy);
 
         let err = app
             .invoke(
-                "read_workspace_file".into(),
+                &"read_workspace_file".to_string(),
                 &InvocationParams::new(&ws.root, Some(Capabilities::empty())),
                 json!({ "path": "hello.txt" }),
             )

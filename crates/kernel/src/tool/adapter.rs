@@ -81,11 +81,12 @@ impl<K: Kernel, T: ToolImpl<K>> ToolAdapter<K> for KernelToolAdapter<K, T> {
     async fn invoke(&self, ctx: &K::ToolCx<'_>, payload: Value) -> Result<ToolOutcome, ToolError> {
         let registration = ctx.registration();
         audit::record_tool_capabilities_override(
+            ctx.tool_path(),
             registration,
             registration.spec().capabilities,
             ctx.effective_capabilities(),
         );
-        let tool_span = audit::tool_invocation_span(registration);
+        let tool_span = audit::tool_invocation_span(ctx.tool_path(), registration);
 
         async {
             let parse_span = audit::parse_input_span();
