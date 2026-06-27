@@ -61,8 +61,9 @@ Internally it resolves the request into one or more actions, asks policy for a
 grant, and executes only granted actions.
 
 Code:
-- `crates/kernel/src/service/fs/mod.rs`
-- `crates/kernel/src/service/network/mod.rs`
+- `crates/service-fs/src/service.rs`
+- `crates/service-network/src/service.rs`
+- `crates/service-monty/src/service.rs`
 
 ### Action
 
@@ -75,8 +76,9 @@ grants them.
 
 Code:
 - `crates/kernel/src/action.rs`
-- `crates/kernel/src/service/fs/action.rs`
-- `crates/kernel/src/service/network/action.rs`
+- `crates/service-fs/src/action.rs`
+- `crates/service-network/src/action.rs`
+- `crates/service-monty/src/action.rs`
 
 ### Policy
 
@@ -96,8 +98,9 @@ policies.
 Code:
 - `crates/kernel/src/policy/plane.rs`
 - `crates/kernel/src/policy/traits.rs`
-- `crates/kernel/src/service/fs/policy.rs`
-- `crates/kernel/src/service/network/policy.rs`
+- `crates/service-fs/src/policy.rs`
+- `crates/service-network/src/policy.rs`
+- `crates/service-monty/src/policy.rs`
 
 ### Grant
 
@@ -140,8 +143,8 @@ Write targets that do not exist are represented by canonicalizing their parent
 directory and then re-attaching the requested file name.
 
 Code:
-- `crates/kernel/src/service/fs/action.rs`
-- `crates/kernel/src/service/fs/policy.rs`
+- `crates/service-fs/src/action.rs`
+- `crates/service-fs/src/policy.rs`
 
 Tradeoff:
 This is still path-based authorization. It improves consistency and audit
@@ -176,9 +179,12 @@ Read in this order:
 2. `crates/kernel/src/policy/decision.rs`
 3. `crates/kernel/src/policy/plane.rs`
 4. `crates/kernel/src/policy/grant.rs`
-5. `crates/kernel/src/service/fs/mod.rs`
-6. `crates/kernel/src/service/fs/action.rs`
-7. `crates/kernel/src/service/fs/policy.rs`
-8. `crates/kernel/src/audit.rs`
-9. `crates/app/src/lib.rs`
-10. `crates/tool-builtin/src`
+5. `crates/service-fs/src/service.rs`
+6. `crates/service-fs/src/action.rs`
+7. `crates/service-fs/src/policy.rs`
+8. `crates/service-network/src/service.rs`
+9. `crates/service-monty/src/service.rs`
+10. `crates/kernel/src/audit.rs`
+11. `crates/app/src/lib.rs`
+12. `crates/tool-builtin/src`
+13. `crates/tool-monty/src/lib.rs`

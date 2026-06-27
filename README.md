@@ -34,12 +34,15 @@ If you want to jump straight into code, read in this order:
 2. `crates/kernel/src/policy/decision.rs`
 3. `crates/kernel/src/policy/plane.rs`
 4. `crates/kernel/src/policy/grant.rs`
-5. `crates/kernel/src/service/fs/mod.rs`
-6. `crates/kernel/src/service/fs/action.rs`
-7. `crates/kernel/src/service/fs/policy.rs`
-8. `crates/kernel/src/audit.rs`
-9. `crates/app/src/lib.rs`
-10. `crates/tool-builtin/src`
+5. `crates/service-fs/src/service.rs`
+6. `crates/service-fs/src/action.rs`
+7. `crates/service-fs/src/policy.rs`
+8. `crates/service-network/src/service.rs`
+9. `crates/service-monty/src/service.rs`
+10. `crates/kernel/src/audit.rs`
+11. `crates/app/src/lib.rs`
+12. `crates/tool-builtin/src`
+13. `crates/tool-monty/src/lib.rs`
 
 ## Architecture goals
 
@@ -54,10 +57,15 @@ If you want to jump straight into code, read in this order:
 
 ```text
 crates/contract   Shared protocol, metadata, capabilities, invocation params
-crates/kernel     Kernel traits, tool context, actions, policy, services, audit
-crates/app        Concrete application kernel wiring tools, services, and policy
-crates/tool-builtin    Example tools that exercise the architecture
-examples/demo.rs  Small end-to-end executable example
+crates/kernel     Kernel traits, tool context, actions, policy, grants, audit
+crates/service-fs      Filesystem service facade, actions, backend, policies
+crates/service-network Network service facade, actions, backend, policies
+crates/service-monty   Monty session service, actions, store, policies
+crates/tool-builtin    Example Rust tools that exercise the architecture
+crates/tool-monty      Monty-backed tool runtime and Monty OS bridge
+crates/app        Concrete application kernel wiring tools, services, policy
+crates/test-support    Test helpers shared across crates
+examples/demo.rs       Small end-to-end executable example
 ```
 
 ## Logical layers
@@ -96,16 +104,19 @@ The logical architecture is about runtime responsibility:
 
 ```text
 example demo
-  depends on app + builtin
+  depends on app + tool-builtin + tool-monty
 
 app
   concrete Kernel implementation and runtime wiring
 
-builtin
-  example ToolImpl implementations
+tool-builtin / tool-monty
+  ToolImpl implementations
+
+service-fs / service-network / service-monty
+  concrete service facades, actions, backends or stores, resource policies
 
 kernel
-  reusable traits, policy engine, service facades, audit, action flow
+  reusable traits, policy engine, grants, audit, action flow
 
 contract
   shared request/outcome/spec/capability types
@@ -113,9 +124,10 @@ contract
 
 The implementation layout is about code ownership and dependency direction.
 `contract` is the lowest shared layer. `kernel` defines reusable runtime
-mechanics. `app` wires those mechanics into a concrete kernel. `builtin` supplies
-tools that can run on that kernel-facing abstraction. `examples/demo.rs` composes
-the pieces.
+mechanics without concrete service domains. Service crates plug side-effect
+domains into the shared action, policy, grant, and audit flow. `app` wires those
+mechanics and services into a concrete kernel. Tool crates supply tools that can
+run on that kernel-facing abstraction. `examples/demo.rs` composes the pieces.
 
 ### `contract`
 
@@ -137,12 +149,24 @@ boundary.
 - tool registration and invocation adapters
 - `Action` and `Granted<Action>` authorization flow
 - inbound, typed, and outbound policy evaluation
-- service facades, such as filesystem and network
 - structured audit helpers
-- canonical filesystem path types
 
 The kernel crate contains the design primitives, but not the concrete application
-state.
+state or concrete side-effect services.
+
+### `service-*`
+
+Service crates define concrete side-effect domains:
+
+- `mvp-service-fs` owns filesystem canonical path types, fs actions, fs facade,
+  backend traits, and fs policies.
+- `mvp-service-network` owns network fetch actions, network facade, backend
+  traits, and URL policies.
+- `mvp-service-monty` owns Monty session load/save actions, session facade,
+  session store traits, and session policies.
+
+Each service crate uses the kernel's shared `Action`, `PolicyPlane`,
+`Granted<Action>`, and audit flow.
 
 ### `app`
 
@@ -154,13 +178,15 @@ It wires together:
 - registered tools
 - `StdFsBackend`
 - `DenyNetworkBackend`
+- `MemoryMontySessionStore`
 - `PolicyPlane`
 - `CapabilityEnvelopePolicy`
+- `AllowMontySessionPolicy`
 - per-call `AppToolContext`
 
 This crate is where invocation parameters become an effective runtime context.
 
-### `builtin`
+### `tool-builtin`
 
 `mvp-tool-builtin` contains small tools that demonstrate the model:
 
@@ -169,6 +195,18 @@ This crate is where invocation parameters become an effective runtime context.
 - `double` performs nested tool invocation
 
 These tools are examples, not the architectural center of the repository.
+
+### `tool-monty`
+
+`mvp-tool-monty` contains tools that run Monty code through the same kernel
+boundary:
+
+- `MontyTool` runs Monty snippets and can expose registered host tools as Monty
+  functions.
+- `MontyOsTool` handles supported Monty OS calls, such as `Path.read_text` and
+  `Path.write_text`, by routing them through services like `ctx.fs()`.
+- Monty REPL state is loaded and saved through `ctx.monty_sessions()`, so session
+  persistence remains policy-mediated and auditable.
 
 Run the end-to-end example with:
 
@@ -252,14 +290,15 @@ Current domains:
 
 - filesystem read/write
 - network fetch
+- Monty session load/save
 
 The facade constructs an action, asks policy for a grant, and only then delegates
 to the backend. This keeps tool logic, authorization, audit, and domain I/O in
 separate layers.
 
 Backends perform direct domain operations. Tools receive service facades such as
-`ctx.fs()`, not backend handles, so ordinary tool code cannot bypass
-authorization.
+`ctx.fs()`, `ctx.network()`, or `ctx.monty_sessions()`, not backend or store
+handles, so ordinary tool code cannot bypass authorization.
 
 Filesystem services canonicalize paths against the workspace root before
 authorization and execution. Existing write targets are canonicalized directly;
@@ -298,8 +337,10 @@ This repository does not claim to be a finished security system.
 
 Known MVP boundaries:
 
-- only filesystem and network service examples are fleshed out
+- filesystem, network, and Monty session services are examples rather than a
+  complete service catalog
 - URL handling is intentionally simple
+- Monty OS support currently covers selected calls only
 - `ToolOutcome.classification` exists in the contract but is not enforced as an
   output authorization boundary
 - only tools are included in this kernel
