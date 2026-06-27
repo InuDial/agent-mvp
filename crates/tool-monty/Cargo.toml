@@ -1,18 +1,19 @@
 [package]
-name = "mvp-app"
+name = "mvp-tool-monty"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 async-trait.workspace = true
+serde_json.workspace = true
 mvp-contract.workspace = true
 mvp-kernel.workspace = true
 mvp-service-fs.workspace = true
 mvp-service-monty.workspace = true
-mvp-service-network.workspace = true
-mvp-tool-monty.workspace = true
-serde_json.workspace = true
-tracing.workspace = true
+monty = { path = "../../third_party/monty/crates/monty" }
 
 [dev-dependencies]
 tokio.workspace = true
+mvp-tool-builtin.workspace = true
+mvp-test-support.workspace = true
+mvp-service-network.workspace = true

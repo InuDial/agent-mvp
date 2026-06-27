@@ -49,7 +49,7 @@ side effects.
 Code:
 - `crates/kernel/src/tool/adapter.rs`
 - `crates/kernel/src/tool/context.rs`
-- `crates/builtin/src`
+- `crates/tool-builtin/src`
 
 ### Service
 
@@ -181,5 +181,4 @@ Read in this order:
 7. `crates/kernel/src/service/fs/policy.rs`
 8. `crates/kernel/src/audit.rs`
 9. `crates/app/src/lib.rs`
-10. `crates/builtin/src`
-
+10. `crates/tool-builtin/src`

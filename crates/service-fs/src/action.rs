@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 
 use mvp_contract::{Capabilities, Capability};
 
-use crate::action::{Action, AuditResource};
-use crate::error::AuthorizationError;
-use crate::policy::Granted;
+use mvp_kernel::action::{Action, AuditResource};
+use mvp_kernel::error::AuthorizationError;
+use mvp_kernel::policy::Granted;
 
 #[derive(Clone, Debug)]
 pub struct CanonicalPath {

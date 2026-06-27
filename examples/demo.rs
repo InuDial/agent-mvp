@@ -1,13 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mvp_app::App;
-use mvp_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
 use mvp_contract::{Capability, InvocationParams};
 use mvp_kernel::kernel::Kernel;
-use mvp_kernel::service::fs::{
-    AllowExactFileWritePolicy, AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy,
-};
-use mvp_monty_tool::{MontyOsTool, MontyTool};
+use mvp_service_fs::{AllowExactFileWritePolicy, AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy};
+use mvp_tool_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
+use mvp_tool_monty::{MontyOsTool, MontyTool};
 use serde_json::json;
 use tracing_subscriber::{EnvFilter, fmt};
 

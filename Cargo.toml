@@ -8,17 +8,25 @@ publish = false
 members = [
     "crates/contract",
     "crates/kernel",
-    "crates/builtin",
+    "crates/service-fs",
+    "crates/service-monty",
+    "crates/service-network",
+    "crates/test-support",
+    "crates/tool-builtin",
     "crates/app",
-    "crates/monty-tool",
+    "crates/tool-monty",
 ]
 default-members = [
     ".",
     "crates/contract",
     "crates/kernel",
-    "crates/builtin",
+    "crates/service-fs",
+    "crates/service-monty",
+    "crates/service-network",
+    "crates/test-support",
+    "crates/tool-builtin",
     "crates/app",
-    "crates/monty-tool",
+    "crates/tool-monty",
 ]
 resolver = "2"
 exclude = ["third_party/monty"]
@@ -32,16 +40,21 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 bitflags = "2.13.0"
 mvp-contract = { path = "crates/contract" }
 mvp-kernel = { path = "crates/kernel" }
-mvp-builtin = { path = "crates/builtin" }
+mvp-service-fs = { path = "crates/service-fs" }
+mvp-service-monty = { path = "crates/service-monty" }
+mvp-service-network = { path = "crates/service-network" }
+mvp-test-support = { path = "crates/test-support" }
+mvp-tool-builtin = { path = "crates/tool-builtin" }
 mvp-app = { path = "crates/app" }
-mvp-monty-tool = { path = "crates/monty-tool" }
+mvp-tool-monty = { path = "crates/tool-monty" }
 
 [dependencies]
 serde_json.workspace = true
 tokio.workspace = true
 mvp-contract.workspace = true
 mvp-kernel.workspace = true
-mvp-builtin.workspace = true
+mvp-service-fs.workspace = true
+mvp-tool-builtin.workspace = true
 mvp-app.workspace = true
-mvp-monty-tool.workspace = true
+mvp-tool-monty.workspace = true
 tracing-subscriber.workspace = true

@@ -39,7 +39,7 @@ If you want to jump straight into code, read in this order:
 7. `crates/kernel/src/service/fs/policy.rs`
 8. `crates/kernel/src/audit.rs`
 9. `crates/app/src/lib.rs`
-10. `crates/builtin/src`
+10. `crates/tool-builtin/src`
 
 ## Architecture goals
 
@@ -56,7 +56,7 @@ If you want to jump straight into code, read in this order:
 crates/contract   Shared protocol, metadata, capabilities, invocation params
 crates/kernel     Kernel traits, tool context, actions, policy, services, audit
 crates/app        Concrete application kernel wiring tools, services, and policy
-crates/builtin    Example tools that exercise the architecture
+crates/tool-builtin    Example tools that exercise the architecture
 examples/demo.rs  Small end-to-end executable example
 ```
 
@@ -162,7 +162,7 @@ This crate is where invocation parameters become an effective runtime context.
 
 ### `builtin`
 
-`mvp-builtin` contains small tools that demonstrate the model:
+`mvp-tool-builtin` contains small tools that demonstrate the model:
 
 - `read_file` uses `ctx.fs().read_file(...)`
 - `write_file` uses `ctx.fs().write_file(...)`

@@ -671,10 +671,11 @@ name = "mvp"
 version = "0.1.0"
 dependencies = [
  "mvp-app",
- "mvp-builtin",
  "mvp-contract",
  "mvp-kernel",
- "mvp-monty-tool",
+ "mvp-service-fs",
+ "mvp-tool-builtin",
+ "mvp-tool-monty",
  "serde_json",
  "tokio",
  "tracing-subscriber",
@@ -687,21 +688,13 @@ dependencies = [
  "async-trait",
  "mvp-contract",
  "mvp-kernel",
- "mvp-monty-tool",
+ "mvp-service-fs",
+ "mvp-service-monty",
+ "mvp-service-network",
+ "mvp-tool-monty",
  "serde_json",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "mvp-builtin"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "mvp-contract",
- "mvp-kernel",
- "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -727,14 +720,77 @@ dependencies = [
 ]
 
 [[package]]
-name = "mvp-monty-tool"
+name = "mvp-service-fs"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mvp-contract",
+ "mvp-kernel",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "mvp-service-monty"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mvp-contract",
+ "mvp-kernel",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "mvp-service-network"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mvp-contract",
+ "mvp-kernel",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "mvp-test-support"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mvp-contract",
+ "mvp-kernel",
+ "mvp-service-fs",
+ "mvp-service-network",
+ "serde_json",
+]
+
+[[package]]
+name = "mvp-tool-builtin"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mvp-contract",
+ "mvp-kernel",
+ "mvp-service-fs",
+ "mvp-service-network",
+ "mvp-test-support",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "mvp-tool-monty"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "monty",
- "mvp-builtin",
  "mvp-contract",
  "mvp-kernel",
+ "mvp-service-fs",
+ "mvp-service-monty",
+ "mvp-service-network",
+ "mvp-test-support",
+ "mvp-tool-builtin",
  "serde_json",
  "tokio",
 ]

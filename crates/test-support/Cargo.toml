@@ -1,5 +1,5 @@
 [package]
-name = "mvp-app"
+name = "mvp-test-support"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,11 +8,6 @@ async-trait.workspace = true
 mvp-contract.workspace = true
 mvp-kernel.workspace = true
 mvp-service-fs.workspace = true
-mvp-service-monty.workspace = true
 mvp-service-network.workspace = true
-mvp-tool-monty.workspace = true
 serde_json.workspace = true
-tracing.workspace = true
 
-[dev-dependencies]
-tokio.workspace = true

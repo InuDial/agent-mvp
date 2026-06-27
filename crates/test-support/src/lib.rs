@@ -1,21 +1,21 @@
-use crate::kernel::Kernel;
-use crate::service::fs::{
-    AllowWorkspaceFsPolicy, CanonicalRoot, FsAction, FsBackend, FsService, HasFsBackend,
-    HasFsService, StdFsBackend,
-};
-use crate::service::network::{
-    HasNetworkBackend, HasNetworkService, NetworkBackend, NetworkService, StaticNetworkBackend,
-};
-use crate::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
-use crate::{
+use async_trait::async_trait;
+use mvp_contract::{Capabilities, InvocationParams, ToolOutcome, ToolSpec};
+use mvp_kernel::kernel::Kernel;
+use mvp_kernel::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
+use mvp_kernel::{
     audit,
     error::{AuthorizationError, ToolError},
     policy::{
         CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
     },
 };
-use async_trait::async_trait;
-use mvp_contract::{Capabilities, InvocationParams, ToolOutcome, ToolSpec};
+use mvp_service_fs::{
+    AllowWorkspaceFsPolicy, CanonicalRoot, FsAction, FsService, HasFsBackend, HasFsService,
+    StdFsBackend,
+};
+use mvp_service_network::{
+    HasNetworkBackend, HasNetworkService, NetworkService, StaticNetworkBackend,
+};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -121,13 +121,17 @@ impl Default for MockKernel {
 }
 
 impl HasFsBackend for MockKernel {
-    fn fs_backend(&self) -> &dyn FsBackend {
+    type FsBackend = StdFsBackend;
+
+    fn fs_backend(&self) -> &Self::FsBackend {
         &self.fs
     }
 }
 
 impl HasNetworkBackend for MockKernel {
-    fn network_backend(&self) -> &dyn NetworkBackend {
+    type NetworkBackend = StaticNetworkBackend;
+
+    fn network_backend(&self) -> &Self::NetworkBackend {
         &self.network
     }
 }
@@ -167,7 +171,10 @@ impl<'a> MockToolContext<'a> {
 #[async_trait]
 impl ToolContext<MockKernel> for MockToolContext<'_> {
     fn policy_context(&self) -> KernelPolicyContext<'_> {
-        KernelPolicyContext::new(self.effective_capabilities, &self.canonical_workspace_root)
+        KernelPolicyContext::new(
+            self.effective_capabilities,
+            self.canonical_workspace_root.as_path(),
+        )
     }
 
     fn effective_capabilities(&self) -> Capabilities {
@@ -258,11 +265,11 @@ impl Kernel for MockKernel {
         &self.policy
     }
 
-    fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, crate::error::InputError> {
+    fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, mvp_kernel::error::InputError> {
         value
             .as_str()
             .map(ToOwned::to_owned)
-            .ok_or(crate::error::InputError::InvalidField("tool_path"))
+            .ok_or(mvp_kernel::error::InputError::InvalidField("tool_path"))
     }
 
     async fn invoke(

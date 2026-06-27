@@ -1,10 +1,6 @@
 //! Monty-backed tool runtime.
 
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-    sync::Mutex,
-};
+use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use monty::{
@@ -15,106 +11,14 @@ use mvp_contract::{Capabilities, OutputClassification, ToolOutcome, ToolSpec};
 use mvp_kernel::{
     error::{ExecutionError, InputError, ToolError},
     kernel::Kernel,
-    service::fs::{HasFsBackend, HasFsService},
     tool::{ToolContext, ToolImpl},
 };
+use mvp_service_fs::{FsBackend, HasFsService};
+use mvp_service_monty::{HasMontySessionService, MontySessionStore};
 use serde_json::{Map, Number, Value, json};
 
 const DEFAULT_TOOL_NAME: &str = "monty";
 const DEFAULT_OS_TOOL_NAME: &str = "monty_os";
-
-/// Kernel-side storage for serialized Monty REPL sessions.
-pub trait MontySessionStore: Send + Sync {
-    fn load(&self, key: &MontySessionKey) -> Result<Option<Vec<u8>>, ExecutionError>;
-    fn save(&self, key: MontySessionKey, bytes: Vec<u8>) -> Result<(), ExecutionError>;
-}
-
-/// Kernel extension for implementations that own Monty session storage.
-pub trait HasMontySessionStore {
-    fn monty_session_store(&self) -> &dyn MontySessionStore;
-}
-
-/// Tool-context extension used by [`MontyTool`] to read and persist REPL state.
-pub trait HasMontySessionService<K>: ToolContext<K>
-where
-    K: Kernel,
-{
-    fn monty_sessions(&self) -> MontySessionService<'_>;
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct MontySessionKey {
-    workspace_root: PathBuf,
-    session_id: String,
-}
-
-impl MontySessionKey {
-    #[must_use]
-    pub fn new(workspace_root: impl AsRef<Path>, session_id: impl Into<String>) -> Self {
-        Self {
-            workspace_root: workspace_root.as_ref().to_path_buf(),
-            session_id: session_id.into(),
-        }
-    }
-}
-
-pub struct MontySessionService<'a> {
-    store: &'a dyn MontySessionStore,
-    workspace_root: PathBuf,
-}
-
-impl<'a> MontySessionService<'a> {
-    #[must_use]
-    pub fn new(store: &'a dyn MontySessionStore, workspace_root: impl AsRef<Path>) -> Self {
-        Self {
-            store,
-            workspace_root: workspace_root.as_ref().to_path_buf(),
-        }
-    }
-
-    pub fn load(&self, session_id: &str) -> Result<Option<Vec<u8>>, ExecutionError> {
-        self.store
-            .load(&MontySessionKey::new(&self.workspace_root, session_id))
-    }
-
-    pub fn save(&self, session_id: &str, bytes: Vec<u8>) -> Result<(), ExecutionError> {
-        self.store.save(
-            MontySessionKey::new(&self.workspace_root, session_id),
-            bytes,
-        )
-    }
-}
-
-#[derive(Default)]
-pub struct MemoryMontySessionStore {
-    sessions: Mutex<BTreeMap<MontySessionKey, Vec<u8>>>,
-}
-
-impl MemoryMontySessionStore {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl MontySessionStore for MemoryMontySessionStore {
-    fn load(&self, key: &MontySessionKey) -> Result<Option<Vec<u8>>, ExecutionError> {
-        let sessions = self
-            .sessions
-            .lock()
-            .map_err(|err| ExecutionError::Other(format!("Monty session store poisoned: {err}")))?;
-        Ok(sessions.get(key).cloned())
-    }
-
-    fn save(&self, key: MontySessionKey, bytes: Vec<u8>) -> Result<(), ExecutionError> {
-        let mut sessions = self
-            .sessions
-            .lock()
-            .map_err(|err| ExecutionError::Other(format!("Monty session store poisoned: {err}")))?;
-        sessions.insert(key, bytes);
-        Ok(())
-    }
-}
 
 /// Tool that runs Monty snippets and routes host-boundary calls back through
 /// the tool plane.
@@ -339,7 +243,7 @@ impl MontyTool {
 #[async_trait]
 impl<K> ToolImpl<K> for MontyTool
 where
-    K: Kernel + HasMontySessionStore,
+    K: Kernel + MontySessionStore,
     for<'a> K::ToolCx<'a>: HasMontySessionService<K>,
 {
     type Input = MontyInput;
@@ -376,6 +280,7 @@ where
         let sessions = ctx.monty_sessions();
         let repl = match sessions
             .load(&input.session_id)
+            .await
             .map_err(ToolError::Execution)?
         {
             Some(bytes) => MontyRepl::load(&bytes)
@@ -390,6 +295,7 @@ where
             .map_err(|err| execution_error(format!("failed to serialize Monty session: {err}")))?;
         sessions
             .save(&input.session_id, session)
+            .await
             .map_err(ToolError::Execution)?;
 
         Ok(ToolOutcome {
@@ -405,7 +311,7 @@ where
 #[async_trait]
 impl<K> ToolImpl<K> for MontyOsTool
 where
-    K: Kernel + HasFsBackend,
+    K: Kernel + FsBackend,
     for<'a> K::ToolCx<'a>: HasFsService<K>,
 {
     type Input = MontyOsInput;
@@ -676,13 +582,18 @@ mod tests {
         policy::{
             CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
         },
-        service::fs::{
-            AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, CanonicalRoot, FsAction, FsBackend,
-            FsService, HasFsBackend, HasFsService, StdFsBackend,
-        },
-        test_support::TempWorkspace,
         tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
     };
+    use mvp_service_fs::{
+        AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, CanonicalRoot, FsAction, FsService,
+        HasFsBackend, HasFsService, StdFsBackend,
+    };
+    use mvp_service_monty::{
+        AllowMontySessionPolicy, HasMontySessionService, HasMontySessionStore,
+        MemoryMontySessionStore, MontySessionLoadAction, MontySessionSaveAction,
+        MontySessionService,
+    };
+    use mvp_test_support::TempWorkspace;
     use std::collections::BTreeMap;
     use std::path::Path;
 
@@ -698,6 +609,8 @@ mod tests {
             let mut policy = PolicyPlane::new();
             policy.prepend_inbound(CapabilityEnvelopePolicy);
             policy.append::<FsAction, _>(AllowWorkspaceFsPolicy);
+            policy.append::<MontySessionLoadAction, _>(AllowMontySessionPolicy);
+            policy.append::<MontySessionSaveAction, _>(AllowMontySessionPolicy);
 
             Self {
                 tools: BTreeMap::new(),
@@ -723,13 +636,17 @@ mod tests {
     }
 
     impl HasFsBackend for TestKernel {
-        fn fs_backend(&self) -> &dyn FsBackend {
+        type FsBackend = StdFsBackend;
+
+        fn fs_backend(&self) -> &Self::FsBackend {
             &self.fs
         }
     }
 
     impl HasMontySessionStore for TestKernel {
-        fn monty_session_store(&self) -> &dyn MontySessionStore {
+        type MontySessionStore = MemoryMontySessionStore;
+
+        fn monty_session_store(&self) -> &Self::MontySessionStore {
             &self.monty_sessions
         }
     }
@@ -769,7 +686,10 @@ mod tests {
     #[async_trait]
     impl ToolContext<TestKernel> for TestToolContext<'_> {
         fn policy_context(&self) -> KernelPolicyContext<'_> {
-            KernelPolicyContext::new(self.effective_capabilities, &self.canonical_workspace_root)
+            KernelPolicyContext::new(
+                self.effective_capabilities,
+                self.canonical_workspace_root.as_path(),
+            )
         }
 
         fn effective_capabilities(&self) -> Capabilities {
@@ -838,8 +758,8 @@ mod tests {
     }
 
     impl HasMontySessionService<TestKernel> for TestToolContext<'_> {
-        fn monty_sessions(&self) -> MontySessionService<'_> {
-            MontySessionService::new(self.kernel.monty_session_store(), self.workspace_root())
+        fn monty_sessions(&self) -> MontySessionService<'_, TestKernel> {
+            MontySessionService::new(self.kernel, self.workspace_root(), self.policy_context())
         }
     }
 

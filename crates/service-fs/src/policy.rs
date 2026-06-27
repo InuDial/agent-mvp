@@ -2,12 +2,13 @@
 //!
 //! These policies compare canonical action paths with canonical policy operands:
 //! exact paths use `CanonicalPath`, prefix policies use `CanonicalPrefix`, and
-//! workspace policies use the `CanonicalRoot` carried by the policy context.
+//! workspace policies use the canonical workspace path carried by the policy
+//! context.
 
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use crate::policy::{Policy, PolicyContextFactory, PolicyGrant, WorkspacePolicyContext};
+use mvp_kernel::policy::{Policy, PolicyContextFactory, PolicyGrant, WorkspacePolicyContext};
 
 use super::action::{CanonicalPath, CanonicalPrefix, FsAction, FsReadAction, FsWriteAction};
 
@@ -28,10 +29,10 @@ where
         let predicate = format!(
             "path starts_with workspace_root: {} starts_with {}",
             action.path.as_path().display(),
-            ctx.workspace_root().as_path().display()
+            ctx.workspace_root().display()
         );
 
-        if ctx.workspace_root().contains(&action.path) {
+        if action.path.as_path().starts_with(ctx.workspace_root()) {
             PolicyGrant::allow(Some("filesystem path is under workspace root".into()))
                 .with_predicate(predicate)
         } else {
@@ -136,10 +137,10 @@ where
         let predicate = format!(
             "path starts_with workspace_root: {} starts_with {}",
             action.path.as_path().display(),
-            ctx.workspace_root().as_path().display()
+            ctx.workspace_root().display()
         );
 
-        if ctx.workspace_root().contains(&action.path) {
+        if action.path.as_path().starts_with(ctx.workspace_root()) {
             PolicyGrant::allow(Some("read path is under workspace root".into()))
                 .with_predicate(predicate)
         } else {
@@ -245,10 +246,10 @@ where
         let predicate = format!(
             "path starts_with workspace_root: {} starts_with {}",
             action.path.as_path().display(),
-            ctx.workspace_root().as_path().display()
+            ctx.workspace_root().display()
         );
 
-        if ctx.workspace_root().contains(&action.path) {
+        if action.path.as_path().starts_with(ctx.workspace_root()) {
             PolicyGrant::allow(Some("write path is under workspace root".into()))
                 .with_predicate(predicate)
         } else {

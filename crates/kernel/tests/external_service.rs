@@ -8,7 +8,6 @@ use mvp_kernel::policy::{
     Granted, KernelPolicyContext, KernelPolicyContextFactory, Policy, PolicyEngine, PolicyGrant,
     PolicyPlane,
 };
-use mvp_kernel::service::fs::CanonicalRoot;
 
 struct ExternalEchoService<'a> {
     policy: &'a PolicyPlane<KernelPolicyContextFactory>,
@@ -101,7 +100,7 @@ impl Policy<KernelPolicyContextFactory, ExternalEchoAction> for AllowExternalEch
 
 #[tokio::test]
 async fn external_crate_can_define_service_action_and_executor() {
-    let root = CanonicalRoot::existing(std::env::current_dir().unwrap()).unwrap();
+    let root = std::fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
     let ctx = KernelPolicyContext::new(Capabilities::empty(), &root);
 
     let mut policy = PolicyPlane::new();

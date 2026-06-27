@@ -33,7 +33,7 @@ Use this file when you see a type or pattern and want to know why it exists.
 
 If you want to understand one workflow end to end, start with filesystem read:
 
-1. `mvp-builtin/src/read_file.rs`: tool asks for `ctx.fs().read_file(...)`
+1. `mvp-tool-builtin/src/read_file.rs`: tool asks for `ctx.fs().read_file(...)`
 2. `mvp-kernel/src/service/fs/mod.rs`: service creates fs actions
 3. `mvp-kernel/src/service/fs/action.rs`: canonical paths and action metadata
 4. `mvp-kernel/src/policy/plane.rs`: policy evaluation order

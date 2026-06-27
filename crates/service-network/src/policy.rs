@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 
-use crate::policy::{Policy, PolicyContextFactory, PolicyGrant};
+use mvp_kernel::policy::{Policy, PolicyContextFactory, PolicyGrant};
 
 use super::action::NetworkFetchAction;
 
@@ -66,7 +66,7 @@ where
     }
 
     async fn grant(&self, _ctx: &F::Context<'_>, action: &NetworkFetchAction) -> PolicyGrant {
-        let host = super::extract_host(&action.url);
+        let host = extract_host(&action.url);
         let predicate = match host {
             Some(host) => format!(
                 "host == domain || host ends_with .domain: {} == {} || {} ends_with .{}",
@@ -87,4 +87,11 @@ where
                 .with_predicate(predicate),
         }
     }
+}
+
+fn extract_host(url: &str) -> Option<&str> {
+    let rest = url.split_once("://")?.1;
+    let host_port = rest.split('/').next()?;
+    let host = host_port.split(':').next()?;
+    if host.is_empty() { None } else { Some(host) }
 }

@@ -1,14 +1,13 @@
 [package]
-name = "mvp-kernel"
+name = "mvp-service-network"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 async-trait.workspace = true
-serde_json.workspace = true
 mvp-contract.workspace = true
-tracing.workspace = true
-anymap = "0.12.1"
-tokio.workspace = true
+mvp-kernel.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
+tokio.workspace = true

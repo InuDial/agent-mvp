@@ -3,8 +3,6 @@ use std::path::Path;
 
 use async_trait::async_trait;
 use mvp_contract::{Capabilities, InvocationParams, ToolOutcome};
-use mvp_kernel::service::fs::StdFsBackend;
-use mvp_kernel::service::network::DenyNetworkBackend;
 use mvp_kernel::{
     audit,
     error::{AuthorizationError, InputError, ToolError},
@@ -12,15 +10,15 @@ use mvp_kernel::{
     policy::{
         CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
     },
-    service::{
-        fs::{CanonicalRoot, FsBackend, FsService, HasFsBackend, HasFsService},
-        network::{HasNetworkBackend, HasNetworkService, NetworkBackend, NetworkService},
-    },
     tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
 };
-use mvp_monty_tool::{
-    HasMontySessionService, HasMontySessionStore, MemoryMontySessionStore, MontySessionService,
-    MontySessionStore,
+use mvp_service_fs::{CanonicalRoot, FsService, HasFsBackend, HasFsService, StdFsBackend};
+use mvp_service_monty::{
+    AllowMontySessionPolicy, HasMontySessionService, HasMontySessionStore, MemoryMontySessionStore,
+    MontySessionLoadAction, MontySessionSaveAction, MontySessionService,
+};
+use mvp_service_network::{
+    DenyNetworkBackend, HasNetworkBackend, HasNetworkService, NetworkService,
 };
 use serde_json::Value;
 
@@ -42,6 +40,8 @@ impl App {
     pub fn new() -> Self {
         let mut policy = PolicyPlane::new();
         policy.prepend_inbound(CapabilityEnvelopePolicy);
+        policy.append::<MontySessionLoadAction, _>(AllowMontySessionPolicy);
+        policy.append::<MontySessionSaveAction, _>(AllowMontySessionPolicy);
 
         Self {
             tools: BTreeMap::new(),
@@ -68,19 +68,25 @@ impl App {
 }
 
 impl HasFsBackend for App {
-    fn fs_backend(&self) -> &dyn FsBackend {
+    type FsBackend = StdFsBackend;
+
+    fn fs_backend(&self) -> &Self::FsBackend {
         &self.fs
     }
 }
 
 impl HasNetworkBackend for App {
-    fn network_backend(&self) -> &dyn NetworkBackend {
+    type NetworkBackend = DenyNetworkBackend;
+
+    fn network_backend(&self) -> &Self::NetworkBackend {
         &self.network
     }
 }
 
 impl HasMontySessionStore for App {
-    fn monty_session_store(&self) -> &dyn MontySessionStore {
+    type MontySessionStore = MemoryMontySessionStore;
+
+    fn monty_session_store(&self) -> &Self::MontySessionStore {
         &self.monty_sessions
     }
 }
@@ -120,7 +126,10 @@ impl<'a> AppToolContext<'a> {
 #[async_trait]
 impl ToolContext<App> for AppToolContext<'_> {
     fn policy_context(&self) -> KernelPolicyContext<'_> {
-        KernelPolicyContext::new(self.effective_capabilities, &self.canonical_workspace_root)
+        KernelPolicyContext::new(
+            self.effective_capabilities,
+            self.canonical_workspace_root.as_path(),
+        )
     }
 
     fn effective_capabilities(&self) -> Capabilities {
@@ -193,8 +202,8 @@ impl HasNetworkService<App> for AppToolContext<'_> {
 }
 
 impl HasMontySessionService<App> for AppToolContext<'_> {
-    fn monty_sessions(&self) -> MontySessionService<'_> {
-        MontySessionService::new(self.app.monty_session_store(), self.workspace_root())
+    fn monty_sessions(&self) -> MontySessionService<'_, App> {
+        MontySessionService::new(self.app, self.workspace_root(), self.policy_context())
     }
 }
 
@@ -250,11 +259,8 @@ mod tests {
 
     use async_trait::async_trait;
     use mvp_contract::{Capabilities, Capability, OutputClassification, ToolSpec};
-    use mvp_kernel::service::fs::AllowWorkspaceFsPolicy;
-    use mvp_kernel::{
-        error::{AuthorizationError, ExecutionError, InputError},
-        service::fs::{AllowWorkspaceReadPolicy, HasFsBackend, HasFsService},
-    };
+    use mvp_kernel::error::{AuthorizationError, ExecutionError, InputError};
+    use mvp_service_fs::{AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, FsBackend};
     use serde_json::{Value, json};
 
     static NEXT_TEST_WORKSPACE_ID: AtomicU64 = AtomicU64::new(1);
@@ -325,7 +331,7 @@ mod tests {
     #[async_trait]
     impl<K> ToolImpl<K> for ReadWorkspaceFileTool
     where
-        K: Kernel + HasFsBackend,
+        K: Kernel + FsBackend,
         for<'a> K::ToolCx<'a>: HasFsService<K>,
     {
         type Input = String;

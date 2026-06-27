@@ -2,15 +2,31 @@ use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
 
-use crate::action::ExecutableAction;
-use crate::error::{CapabilityError, ExecutionError};
-use crate::policy::Granted;
+use mvp_kernel::action::ExecutableAction;
+use mvp_kernel::error::{CapabilityError, ExecutionError};
+use mvp_kernel::policy::Granted;
 
 use super::action::NetworkFetchAction;
 
 #[async_trait]
 pub trait NetworkBackend: Send + Sync {
     async fn fetch_url(&self, url: &str) -> Result<Vec<u8>, CapabilityError>;
+}
+
+pub trait HasNetworkBackend: Send + Sync {
+    type NetworkBackend: NetworkBackend + ?Sized;
+
+    fn network_backend(&self) -> &Self::NetworkBackend;
+}
+
+#[async_trait]
+impl<T> NetworkBackend for T
+where
+    T: HasNetworkBackend,
+{
+    async fn fetch_url(&self, url: &str) -> Result<Vec<u8>, CapabilityError> {
+        self.network_backend().fetch_url(url).await
+    }
 }
 
 pub struct DenyNetworkBackend;

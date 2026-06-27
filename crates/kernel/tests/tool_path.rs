@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use mvp_contract::{Capabilities, InvocationParams, OutputClassification, ToolOutcome, ToolSpec};
@@ -8,7 +8,6 @@ use mvp_kernel::kernel::Kernel;
 use mvp_kernel::policy::{
     CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
 };
-use mvp_kernel::service::fs::CanonicalRoot;
 use mvp_kernel::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
 use serde_json::{Value, json};
 
@@ -53,7 +52,7 @@ struct EnumPathToolContext<'a> {
     tool_path: &'a TestToolPath,
     registration: &'a ToolRegistration,
     effective_capabilities: Capabilities,
-    canonical_workspace_root: CanonicalRoot,
+    canonical_workspace_root: PathBuf,
 }
 
 impl<'a> EnumPathToolContext<'a> {
@@ -70,7 +69,8 @@ impl<'a> EnumPathToolContext<'a> {
             effective_capabilities: params
                 .capabilities_override
                 .unwrap_or_else(Capabilities::empty),
-            canonical_workspace_root: CanonicalRoot::existing(&params.workspace_root)?,
+            canonical_workspace_root: std::fs::canonicalize(&params.workspace_root)
+                .map_err(AuthorizationError::Io)?,
         })
     }
 }
@@ -94,7 +94,7 @@ impl ToolContext<EnumPathKernel> for EnumPathToolContext<'_> {
     }
 
     fn workspace_root(&self) -> &Path {
-        self.canonical_workspace_root.as_path()
+        &self.canonical_workspace_root
     }
 
     async fn invoke_tool(
