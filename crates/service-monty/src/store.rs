@@ -71,7 +71,7 @@ pub struct MontySessionKey {
 
 impl MontySessionKey {
     #[must_use]
-    pub fn new(workspace_root: impl AsRef<Path>, session_id: impl Into<String>) -> Self {
+    pub(crate) fn new(workspace_root: impl AsRef<Path>, session_id: impl Into<String>) -> Self {
         Self {
             workspace_root: workspace_root.as_ref().to_path_buf(),
             session_id: session_id.into(),

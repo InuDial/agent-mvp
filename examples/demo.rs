@@ -4,6 +4,7 @@ use mvp_app::App;
 use mvp_contract::{Capability, InvocationParams};
 use mvp_kernel::kernel::Kernel;
 use mvp_service_fs::{AllowExactFileWritePolicy, AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy};
+use mvp_service_monty::{AllowMontySessionPolicy, MontySessionLoadAction, MontySessionSaveAction};
 use mvp_tool_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
 use mvp_tool_monty::{MontyOsTool, MontyTool};
 use serde_json::json;
@@ -42,10 +43,16 @@ async fn main() {
     )
     .unwrap();
     app.register("monty_os".to_owned(), MontyOsTool).unwrap();
+
     app.policy.append(AllowWorkspaceFsPolicy);
     app.policy
         .append(AllowExactFileWritePolicy::new(root.join("hello.txt")));
     app.policy.append(AllowWorkspaceReadPolicy);
+
+    app.policy
+        .append::<MontySessionLoadAction, _>(AllowMontySessionPolicy);
+    app.policy
+        .append::<MontySessionSaveAction, _>(AllowMontySessionPolicy);
 
     let write_params = InvocationParams::new(&root, Some([Capability::FsWrite].into()));
     let write_outcome = app

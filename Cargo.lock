@@ -674,6 +674,7 @@ dependencies = [
  "mvp-contract",
  "mvp-kernel",
  "mvp-service-fs",
+ "mvp-service-monty",
  "mvp-tool-builtin",
  "mvp-tool-monty",
  "serde_json",

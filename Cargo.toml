@@ -54,6 +54,7 @@ tokio.workspace = true
 mvp-contract.workspace = true
 mvp-kernel.workspace = true
 mvp-service-fs.workspace = true
+mvp-service-monty.workspace = true
 mvp-tool-builtin.workspace = true
 mvp-app.workspace = true
 mvp-tool-monty.workspace = true

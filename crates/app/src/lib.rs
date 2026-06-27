@@ -14,8 +14,7 @@ use mvp_kernel::{
 };
 use mvp_service_fs::{CanonicalRoot, FsService, HasFsBackend, HasFsService, StdFsBackend};
 use mvp_service_monty::{
-    AllowMontySessionPolicy, HasMontySessionService, HasMontySessionStore, MemoryMontySessionStore,
-    MontySessionLoadAction, MontySessionSaveAction, MontySessionService,
+    HasMontySessionService, HasMontySessionStore, MemoryMontySessionStore, MontySessionService,
 };
 use mvp_service_network::{
     DenyNetworkBackend, HasNetworkBackend, HasNetworkService, NetworkService,
@@ -40,8 +39,6 @@ impl App {
     pub fn new() -> Self {
         let mut policy = PolicyPlane::new();
         policy.prepend_inbound(CapabilityEnvelopePolicy);
-        policy.append::<MontySessionLoadAction, _>(AllowMontySessionPolicy);
-        policy.append::<MontySessionSaveAction, _>(AllowMontySessionPolicy);
 
         Self {
             tools: BTreeMap::new(),
