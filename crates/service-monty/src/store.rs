@@ -4,7 +4,12 @@ use std::{
     sync::Mutex,
 };
 
+use async_trait::async_trait;
+use mvp_kernel::action::ActionExecutor;
 use mvp_kernel::error::ExecutionError;
+use mvp_kernel::policy::Granted;
+
+use crate::{MontySessionLoadAction, MontySessionSaveAction};
 
 /// Kernel-side storage for serialized Monty REPL sessions.
 pub trait MontySessionStore: Send + Sync {
@@ -29,6 +34,32 @@ where
 
     fn save(&self, key: MontySessionKey, bytes: Vec<u8>) -> Result<(), ExecutionError> {
         self.monty_session_store().save(key, bytes)
+    }
+}
+
+#[async_trait]
+impl ActionExecutor<MontySessionLoadAction> for dyn MontySessionStore + '_ {
+    type Output = Option<Vec<u8>>;
+
+    async fn execute(
+        &self,
+        granted: Granted<MontySessionLoadAction>,
+    ) -> Result<Self::Output, ExecutionError> {
+        let action = granted.into_action();
+        self.load(&action.key)
+    }
+}
+
+#[async_trait]
+impl ActionExecutor<MontySessionSaveAction> for dyn MontySessionStore + '_ {
+    type Output = ();
+
+    async fn execute(
+        &self,
+        granted: Granted<MontySessionSaveAction>,
+    ) -> Result<Self::Output, ExecutionError> {
+        let action = granted.into_action();
+        self.save(action.key, action.bytes)
     }
 }
 

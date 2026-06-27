@@ -2,13 +2,12 @@
 //!
 //! An `Action` is the semantic unit that policy understands. Service facades
 //! construct actions from tool requests, the policy plane grants or denies them,
-//! and only `Granted<Action>` values can execute through `ExecutableAction`.
+//! and only `Granted<Action>` values can execute through an executor.
 
 use std::any::Any;
-use std::future::Future;
 use std::path::PathBuf;
-use std::pin::Pin;
 
+use async_trait::async_trait;
 use mvp_contract::Capabilities;
 
 use crate::error::ExecutionError;
@@ -39,21 +38,16 @@ pub trait Action: Any + Send + Sync {
     }
 }
 
-/// An action that knows how to execute itself against a domain-local executor.
+/// An executor that knows how to run a granted domain action.
 ///
-/// The action stays domain-specific by declaring its own executor type and
-/// output type, while `Granted<A>` can uniformly forward to this trait.
-pub trait ExecutableAction: Action + Sized {
-    type Executor<'a>: ?Sized + Send + Sync
-    where
-        Self: 'a;
-
+/// Actions stay policy-facing semantic values. Domain execution lives on the
+/// backend or store that performs the side effect.
+#[async_trait]
+pub trait ActionExecutor<A>: Send + Sync
+where
+    A: Action,
+{
     type Output;
 
-    fn execute<'a>(
-        executor: &'a Self::Executor<'a>,
-        granted: Granted<Self>,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output, ExecutionError>> + Send + 'a>>
-    where
-        Self: 'a;
+    async fn execute(&self, granted: Granted<A>) -> Result<Self::Output, ExecutionError>;
 }

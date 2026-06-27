@@ -1,8 +1,6 @@
 use async_trait::async_trait;
-use std::future::Future;
-use std::pin::Pin;
 
-use mvp_kernel::action::ExecutableAction;
+use mvp_kernel::action::ActionExecutor;
 use mvp_kernel::error::{CapabilityError, ExecutionError};
 use mvp_kernel::policy::Granted;
 
@@ -70,40 +68,30 @@ impl FsBackend for StdFsBackend {
     }
 }
 
-impl ExecutableAction for FsReadAction {
-    type Executor<'a> = dyn FsBackend + 'a;
+#[async_trait]
+impl ActionExecutor<FsReadAction> for dyn FsBackend + '_ {
     type Output = String;
 
-    fn execute<'a>(
-        fs: &'a Self::Executor<'a>,
-        granted: Granted<Self>,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output, ExecutionError>> + Send + 'a>>
-    where
-        Self: 'a,
-    {
-        Box::pin(async move {
-            fs.read_canonical(&granted.action().path)
-                .await
-                .map_err(ExecutionError::Capability)
-        })
+    async fn execute(
+        &self,
+        granted: Granted<FsReadAction>,
+    ) -> Result<Self::Output, ExecutionError> {
+        self.read_canonical(&granted.action().path)
+            .await
+            .map_err(ExecutionError::Capability)
     }
 }
 
-impl ExecutableAction for FsWriteAction {
-    type Executor<'a> = dyn FsBackend + 'a;
+#[async_trait]
+impl ActionExecutor<FsWriteAction> for dyn FsBackend + '_ {
     type Output = ();
 
-    fn execute<'a>(
-        fs: &'a Self::Executor<'a>,
-        granted: Granted<Self>,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output, ExecutionError>> + Send + 'a>>
-    where
-        Self: 'a,
-    {
-        Box::pin(async move {
-            fs.write_canonical(&granted.action().path, &granted.action().content)
-                .await
-                .map_err(ExecutionError::Capability)
-        })
+    async fn execute(
+        &self,
+        granted: Granted<FsWriteAction>,
+    ) -> Result<Self::Output, ExecutionError> {
+        self.write_canonical(&granted.action().path, &granted.action().content)
+            .await
+            .map_err(ExecutionError::Capability)
     }
 }

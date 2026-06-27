@@ -51,7 +51,8 @@ where
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        granted.execute(self.kernel).await
+        let executor: &dyn MontySessionStore = self.kernel;
+        granted.execute_with(executor).await
     }
 
     pub async fn save(&self, session_id: &str, bytes: Vec<u8>) -> Result<(), ExecutionError> {
@@ -66,6 +67,7 @@ where
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        granted.execute(self.kernel).await
+        let executor: &dyn MontySessionStore = self.kernel;
+        granted.execute_with(executor).await
     }
 }

@@ -66,7 +66,8 @@ where
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        granted.execute(self.kernel).await
+        let executor: &dyn FsBackend = self.kernel;
+        granted.execute_with(executor).await
     }
 
     pub async fn write_file(&self, path: &str, content: &str) -> Result<(), ExecutionError> {
@@ -89,6 +90,7 @@ where
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        granted.execute(self.kernel).await
+        let executor: &dyn FsBackend = self.kernel;
+        granted.execute_with(executor).await
     }
 }

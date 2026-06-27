@@ -166,7 +166,8 @@ Service crates define concrete side-effect domains:
   session store traits, and session policies.
 
 Each service crate uses the kernel's shared `Action`, `PolicyPlane`,
-`Granted<Action>`, and audit flow.
+`Granted<Action>`, `ActionExecutor`, and audit flow. Actions carry policy and
+audit metadata; backend or store executors own domain execution.
 
 ### `app`
 
@@ -293,8 +294,8 @@ Current domains:
 - Monty session load/save
 
 The facade constructs an action, asks policy for a grant, and only then delegates
-to the backend. This keeps tool logic, authorization, audit, and domain I/O in
-separate layers.
+the granted action to a backend or store executor. This keeps tool logic,
+authorization, audit, and domain I/O in separate layers.
 
 Backends perform direct domain operations. Tools receive service facades such as
 `ctx.fs()`, `ctx.network()`, or `ctx.monty_sessions()`, not backend or store

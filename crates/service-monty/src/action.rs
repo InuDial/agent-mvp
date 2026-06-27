@@ -1,12 +1,7 @@
-use std::future::Future;
-use std::pin::Pin;
-
 use mvp_contract::Capabilities;
-use mvp_kernel::action::{Action, AuditResource, ExecutableAction};
-use mvp_kernel::error::ExecutionError;
-use mvp_kernel::policy::Granted;
+use mvp_kernel::action::{Action, AuditResource};
 
-use crate::{MontySessionKey, MontySessionStore};
+use crate::MontySessionKey;
 
 #[derive(Clone, Debug)]
 pub struct MontySessionLoadAction {
@@ -33,24 +28,6 @@ impl Action for MontySessionLoadAction {
     }
 }
 
-impl ExecutableAction for MontySessionLoadAction {
-    type Executor<'a> = dyn MontySessionStore + 'a;
-    type Output = Option<Vec<u8>>;
-
-    fn execute<'a>(
-        store: &'a Self::Executor<'a>,
-        granted: Granted<Self>,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output, ExecutionError>> + Send + 'a>>
-    where
-        Self: 'a,
-    {
-        Box::pin(async move {
-            let action = granted.into_action();
-            store.load(&action.key)
-        })
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct MontySessionSaveAction {
     pub(crate) key: MontySessionKey,
@@ -74,23 +51,5 @@ impl Action for MontySessionSaveAction {
 
     fn audit_resource(&self) -> AuditResource {
         AuditResource::Value(self.key.audit_resource())
-    }
-}
-
-impl ExecutableAction for MontySessionSaveAction {
-    type Executor<'a> = dyn MontySessionStore + 'a;
-    type Output = ();
-
-    fn execute<'a>(
-        store: &'a Self::Executor<'a>,
-        granted: Granted<Self>,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output, ExecutionError>> + Send + 'a>>
-    where
-        Self: 'a,
-    {
-        Box::pin(async move {
-            let action = granted.into_action();
-            store.save(action.key, action.bytes)
-        })
     }
 }

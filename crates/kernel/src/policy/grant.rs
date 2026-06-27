@@ -1,6 +1,6 @@
 use tracing::Instrument;
 
-use crate::action::{AuditResource, ExecutableAction};
+use crate::action::{Action, ActionExecutor, AuditResource};
 use crate::audit;
 use crate::error::ExecutionError;
 use crate::tool::GrantId;
@@ -116,14 +116,11 @@ impl<A> Granted<A> {
 
 impl<A> Granted<A>
 where
-    A: ExecutableAction,
+    A: Action,
 {
-    pub async fn execute<'a>(
-        self,
-        executor: &'a A::Executor<'a>,
-    ) -> Result<A::Output, ExecutionError>
+    pub async fn execute_with<E>(self, executor: &E) -> Result<E::Output, ExecutionError>
     where
-        A: 'a,
+        E: ActionExecutor<A> + ?Sized,
     {
         let action_kind = self.action.audit_kind();
         let resource = self.action.audit_resource();
@@ -132,7 +129,7 @@ where
         async move {
             audit::execute_start(action_kind, grant_id, &resource);
 
-            let result = A::execute(executor, self).await;
+            let result = executor.execute(self).await;
 
             match &result {
                 Ok(_) => audit::execute_finish(action_kind, grant_id, &resource),

@@ -1,8 +1,6 @@
 use async_trait::async_trait;
-use std::future::Future;
-use std::pin::Pin;
 
-use mvp_kernel::action::ExecutableAction;
+use mvp_kernel::action::ActionExecutor;
 use mvp_kernel::error::{CapabilityError, ExecutionError};
 use mvp_kernel::policy::Granted;
 
@@ -60,22 +58,16 @@ impl NetworkBackend for StaticNetworkBackend {
     }
 }
 
-impl ExecutableAction for NetworkFetchAction {
-    type Executor<'a> = dyn NetworkBackend + 'a;
+#[async_trait]
+impl ActionExecutor<NetworkFetchAction> for dyn NetworkBackend + '_ {
     type Output = Vec<u8>;
 
-    fn execute<'a>(
-        network: &'a Self::Executor<'a>,
-        granted: Granted<Self>,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output, ExecutionError>> + Send + 'a>>
-    where
-        Self: 'a,
-    {
-        Box::pin(async move {
-            network
-                .fetch_url(&granted.action().url)
-                .await
-                .map_err(ExecutionError::Capability)
-        })
+    async fn execute(
+        &self,
+        granted: Granted<NetworkFetchAction>,
+    ) -> Result<Self::Output, ExecutionError> {
+        self.fetch_url(&granted.action().url)
+            .await
+            .map_err(ExecutionError::Capability)
     }
 }

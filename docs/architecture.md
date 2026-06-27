@@ -71,8 +71,7 @@ Purpose:
 Make side-effect intent explicit and auditable.
 
 Actions declare their required capabilities, audit kind, and audit resource.
-Executable actions also know how to run against a domain executor after policy
-grants them.
+Executors know how to run granted actions against their domain backend or store.
 
 Code:
 - `crates/kernel/src/action.rs`
@@ -113,6 +112,23 @@ execution audit records.
 
 Code:
 - `crates/kernel/src/policy/grant.rs`
+
+### Executor
+
+Purpose:
+Keep domain side effects on backend or store objects, while actions remain
+policy-facing intent values.
+
+`ActionExecutor<A>` runs only a `Granted<A>`. `Granted<A>` keeps the shared audit
+wrapper around execution, so services can delegate to domain executors without
+letting ungranted actions run.
+
+Code:
+- `crates/kernel/src/action.rs`
+- `crates/kernel/src/policy/grant.rs`
+- `crates/service-fs/src/backend.rs`
+- `crates/service-network/src/backend.rs`
+- `crates/service-monty/src/store.rs`
 
 ### Audit
 

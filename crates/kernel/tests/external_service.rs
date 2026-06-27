@@ -1,8 +1,6 @@
-use std::future::Future;
-use std::pin::Pin;
-
+use async_trait::async_trait;
 use mvp_contract::Capabilities;
-use mvp_kernel::action::{Action, AuditResource, ExecutableAction};
+use mvp_kernel::action::{Action, ActionExecutor, AuditResource};
 use mvp_kernel::error::ExecutionError;
 use mvp_kernel::policy::{
     Granted, KernelPolicyContext, KernelPolicyContextFactory, Policy, PolicyEngine, PolicyGrant,
@@ -29,7 +27,7 @@ impl ExternalEchoService<'_> {
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        granted.execute(self.executor).await
+        granted.execute_with(self.executor).await
     }
 }
 
@@ -59,24 +57,16 @@ impl ExternalEchoExecutor {
     }
 }
 
-impl ExecutableAction for ExternalEchoAction {
-    type Executor<'a>
-        = ExternalEchoExecutor
-    where
-        Self: 'a;
+#[async_trait]
+impl ActionExecutor<ExternalEchoAction> for ExternalEchoExecutor {
     type Output = String;
 
-    fn execute<'a>(
-        executor: &'a Self::Executor<'a>,
-        granted: Granted<Self>,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output, ExecutionError>> + Send + 'a>>
-    where
-        Self: 'a,
-    {
-        Box::pin(async move {
-            let action = granted.into_action();
-            Ok(executor.echo(&action.value))
-        })
+    async fn execute(
+        &self,
+        granted: Granted<ExternalEchoAction>,
+    ) -> Result<Self::Output, ExecutionError> {
+        let action = granted.into_action();
+        Ok(self.echo(&action.value))
     }
 }
 

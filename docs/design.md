@@ -10,7 +10,7 @@ Use this file when you see a type or pattern and want to know why it exists.
 | Service facade | Converts ergonomic tool calls into auditable actions. | `crates/service-fs/src/service.rs`, `crates/service-network/src/service.rs`, `crates/service-monty/src/service.rs` |
 | Backend / store | Performs direct domain operations after a service has obtained a grant. | `crates/service-fs/src/backend.rs`, `crates/service-network/src/backend.rs`, `crates/service-monty/src/store.rs` |
 | `Action` | Makes side-effect intent explicit for policy and audit. | `crates/kernel/src/action.rs` |
-| `ExecutableAction` | Keeps execution domain-specific while preserving a shared grant flow. | `crates/kernel/src/action.rs` |
+| `ActionExecutor` | Keeps execution on backend/store objects while preserving a shared grant flow. | `crates/kernel/src/action.rs`, `crates/service-fs/src/backend.rs`, `crates/service-network/src/backend.rs`, `crates/service-monty/src/store.rs` |
 | `PolicyPlane` | Centralizes authorization order and default deny behavior. | `crates/kernel/src/policy/plane.rs` |
 | Inbound policies | Apply global gates before resource-specific policy can allow anything. | `crates/kernel/src/policy/plane.rs` |
 | `CapabilityEnvelopePolicy` | Prevents an action from exceeding the invocation's effective capabilities. | `crates/kernel/src/policy/plane.rs` |
@@ -42,5 +42,5 @@ If you want to understand one workflow end to end, start with filesystem read:
 3. `mvp-service-fs/src/action.rs`: canonical paths and action metadata
 4. `mvp-kernel/src/policy/plane.rs`: policy evaluation order
 5. `mvp-service-fs/src/policy.rs`: resource-specific policies
-6. `mvp-kernel/src/policy/grant.rs`: granted action execution
+6. `mvp-kernel/src/policy/grant.rs`: grant value and execution audit wrapper
 7. `mvp-kernel/src/audit.rs`: audit event shape
