@@ -20,9 +20,9 @@ Use this file when you see a type or pattern and want to know why it exists.
 | `Granted<Action>` | Represents authorization as a value required before execution. | `crates/kernel/src/policy/grant.rs` |
 | `GrantId` | Correlates final grant records with execution records. | `crates/kernel/src/tool/mod.rs`, `crates/kernel/src/audit.rs` |
 | `AuditResource` | Gives grant and execution records a stable resource field. | `crates/kernel/src/action.rs` |
-| `policy_grant` audit | Shows each policy's decision at DEBUG level for diagnostics. | `crates/kernel/src/audit.rs`, `crates/kernel/src/policy/plane.rs` |
-| `grant_allow` / `grant_deny` audit | Records the final authorization fact at INFO level. | `crates/kernel/src/audit.rs` |
-| `execute_start` / `execute_finish` / `execute_error` audit | Records execution lifecycle after a grant. | `crates/kernel/src/audit.rs`, `crates/kernel/src/policy/grant.rs` |
+| `policy.evaluate` audit | Shows each policy's decision at DEBUG level for diagnostics. | `crates/kernel/src/audit.rs`, `crates/kernel/src/policy/plane.rs` |
+| `grant.allow` / `grant.deny` audit | Records the final authorization fact at INFO level. | `crates/kernel/src/audit.rs` |
+| `execute.start` / `execute.finish` / `execute.error` audit | Records execution lifecycle after a grant. | `crates/kernel/src/audit.rs`, `crates/kernel/src/policy/grant.rs` |
 | `CanonicalPath` | Ensures fs actions compare canonical filesystem paths, not raw user strings. | `crates/service-fs/src/action.rs` |
 | `CanonicalRoot` | Keeps workspace containment checks on canonical roots. | `crates/service-fs/src/action.rs`, `crates/kernel/src/policy/context.rs` |
 | `CanonicalPrefix` | Keeps prefix policies in the same canonical path space as actions. | `crates/service-fs/src/action.rs`, `crates/service-fs/src/policy.rs` |

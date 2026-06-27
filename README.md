@@ -328,9 +328,15 @@ Audit records are emitted around:
 The audit layer is deliberately verbose for an MVP because the architecture is
 meant to make authorization decisions inspectable.
 
-Final authorization records such as `grant_allow` and `grant_deny` are INFO.
-Per-policy `policy_grant` records are DEBUG because they explain the evaluation
-path rather than the final authorization fact.
+Audit events use stable dot-separated names such as `grant.allow`,
+`grant.deny`, `policy.evaluate`, `execute.start`, `execute.finish`, and
+`execute.error`. They include query-friendly fields such as `phase`, `action`,
+`grant_id`, `grant_id_present`, `resource_kind`, `resource`, `policy_name`,
+`policy_present`, `reason`, and `reason_present`.
+
+Final authorization records such as `grant.allow` and `grant.deny` are INFO.
+Per-policy `policy.evaluate` records are DEBUG because they explain the
+evaluation path rather than the final authorization fact.
 
 ## Current boundaries
 

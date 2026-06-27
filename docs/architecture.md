@@ -139,6 +139,12 @@ Final grant decisions and execution records are `INFO`. Per-policy evaluation
 records are `DEBUG` because they are diagnostic detail rather than the final
 authorization fact.
 
+Audit events use stable dot-separated names such as `grant.allow`,
+`grant.deny`, `policy.evaluate`, `execute.start`, `execute.finish`, and
+`execute.error`. Optional values are emitted with explicit presence fields, for
+example `grant_id` plus `grant_id_present`, so JSON and OTel consumers do not
+need to parse `Some(...)` / `None` debug strings.
+
 Code:
 - `crates/kernel/src/audit.rs`
 

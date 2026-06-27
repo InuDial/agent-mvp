@@ -125,6 +125,7 @@ where
         let action_kind = self.action.audit_kind();
         let resource = self.action.audit_resource();
         let grant_id = self.grant_id;
+        let span = audit::action_execute_span(action_kind, grant_id, &resource);
 
         async move {
             audit::execute_start(action_kind, grant_id, &resource);
@@ -138,7 +139,7 @@ where
 
             result
         }
-        .instrument(audit::action_execute_span(action_kind, grant_id))
+        .instrument(span)
         .await
     }
 }
