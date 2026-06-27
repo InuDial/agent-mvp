@@ -36,7 +36,11 @@ async-trait = "0.1"
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt", "fs"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "json"] }
+tracing-opentelemetry = "0.33"
+opentelemetry = "0.32"
+opentelemetry-otlp = { version = "0.32", default-features = false, features = ["http-proto", "reqwest-blocking-client"] }
+opentelemetry_sdk = { version = "0.32", features = ["trace", "rt-tokio"] }
 bitflags = "2.13.0"
 mvp-contract = { path = "crates/contract" }
 mvp-kernel = { path = "crates/kernel" }
@@ -58,4 +62,9 @@ mvp-service-monty.workspace = true
 mvp-tool-builtin.workspace = true
 mvp-app.workspace = true
 mvp-tool-monty.workspace = true
+tracing.workspace = true
 tracing-subscriber.workspace = true
+tracing-opentelemetry.workspace = true
+opentelemetry.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry_sdk.workspace = true

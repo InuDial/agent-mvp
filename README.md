@@ -331,12 +331,52 @@ meant to make authorization decisions inspectable.
 Audit events use stable dot-separated names such as `grant.allow`,
 `grant.deny`, `policy.evaluate`, `execute.start`, `execute.finish`, and
 `execute.error`. They include query-friendly fields such as `phase`, `action`,
-`grant_id`, `grant_id_present`, `resource_kind`, `resource`, `policy_name`,
-`policy_present`, `reason`, and `reason_present`.
+`grant_id`, `resource_kind`, `resource`, `policy_name`, and `reason`. Optional
+fields are omitted when absent.
 
 Final authorization records such as `grant.allow` and `grant.deny` are INFO.
 Per-policy `policy.evaluate` records are DEBUG because they explain the
 evaluation path rather than the final authorization fact.
+
+The demo keeps the default human-readable tracing output:
+
+```sh
+cargo run --example demo
+```
+
+Set `MVP_LOG_FORMAT=json` to emit newline-delimited JSON audit logs on stdout
+with current span and span list metadata. The demo writes its sample outcomes to
+stderr in this mode so stdout remains machine-readable:
+
+```sh
+MVP_LOG_FORMAT=json RUST_LOG=mvp::audit=debug cargo run --example demo
+```
+
+Set `MVP_TRACE_EXPORTER=otlp` to export the same tracing spans to an
+OpenTelemetry-compatible backend. For a local graphical trace view, run Jaeger
+with OTLP enabled:
+
+```sh
+docker run --rm --name jaeger \
+  -p 16686:16686 \
+  -p 4317:4317 \
+  -p 4318:4318 \
+  -p 5778:5778 \
+  -p 9411:9411 \
+  cr.jaegertracing.io/jaegertracing/jaeger:2.19.0
+```
+
+Then run the demo and open `http://localhost:16686`; the service name is
+`mvp-demo`. The demo defaults to OTLP/HTTP on
+`http://localhost:4318/v1/traces`. Jaeger's `4317` port is OTLP/gRPC; `4318` is
+OTLP/HTTP.
+
+```sh
+MVP_TRACE_EXPORTER=otlp RUST_LOG=mvp::audit=debug cargo run --example demo
+```
+
+`OTEL_EXPORTER_OTLP_ENDPOINT` can override the default
+`http://localhost:4318/v1/traces` trace endpoint.
 
 ## Current boundaries
 

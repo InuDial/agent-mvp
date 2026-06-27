@@ -16,6 +16,7 @@ use crate::policy::{
 };
 use crate::tool::{GrantId, ToolRegistration};
 use mvp_contract::Capabilities;
+use tracing::field::Empty;
 
 pub const AUDIT_TARGET: &str = "mvp::audit";
 
@@ -99,10 +100,6 @@ pub fn record_nested_capability_override<P: Debug, C: Debug>(
         requested_capabilities_override.map(|capabilities| capabilities.bits());
     let actual_child_capabilities =
         actual_child_capabilities.map(|capabilities| capabilities.bits());
-    let requested_capabilities_override_present = requested_capabilities_override.is_some();
-    let actual_child_capabilities_present = actual_child_capabilities.is_some();
-    let requested_capabilities_override = requested_capabilities_override.unwrap_or(0);
-    let actual_child_capabilities = actual_child_capabilities.unwrap_or(0);
 
     if attempted_expand {
         warn!(
@@ -114,9 +111,7 @@ pub fn record_nested_capability_override<P: Debug, C: Debug>(
             child_tool_path = ?child_tool_path,
             parent_effective_capabilities = parent_effective_capabilities.bits(),
             requested_capabilities_override = requested_capabilities_override,
-            requested_capabilities_override_present = requested_capabilities_override_present,
             actual_child_capabilities = actual_child_capabilities,
-            actual_child_capabilities_present = actual_child_capabilities_present,
             attempted_expand = true,
         );
     } else {
@@ -129,9 +124,7 @@ pub fn record_nested_capability_override<P: Debug, C: Debug>(
             child_tool_path = ?child_tool_path,
             parent_effective_capabilities = parent_effective_capabilities.bits(),
             requested_capabilities_override = requested_capabilities_override,
-            requested_capabilities_override_present = requested_capabilities_override_present,
             actual_child_capabilities = actual_child_capabilities,
-            actual_child_capabilities_present = actual_child_capabilities_present,
             attempted_expand = false,
         );
     }
@@ -182,8 +175,6 @@ pub(crate) fn record_grant(record: &GrantRecord) {
         GrantDecision::Allow(grant_id) => Some(grant_id.get()),
         GrantDecision::Deny => None,
     };
-    let grant_id_present = grant_id.is_some();
-    let grant_id = grant_id.unwrap_or(0);
     let (resource_kind, resource_value) = serialize_resource(record.resource());
     let (policy_name, policy_id, grant_source) = match record.source() {
         GrantSource::Policy {
@@ -199,15 +190,12 @@ pub(crate) fn record_grant(record: &GrantRecord) {
         phase = PHASE_GRANT,
         action = record.action_kind(),
         grant_id = grant_id,
-        grant_id_present = grant_id_present,
         resource_kind = resource_kind,
         resource = %resource_value,
         grant_source = grant_source,
-        policy_name = policy_name.unwrap_or(""),
-        policy_id = policy_id.unwrap_or(0),
-        policy_present = policy_name.is_some(),
-        reason = record.reason().unwrap_or(""),
-        reason_present = record.reason().is_some(),
+        policy_name = policy_name,
+        policy_id = policy_id,
+        reason = record.reason(),
     );
 }
 
@@ -237,33 +225,17 @@ pub(crate) fn record_policy_grant(
         policy_id = policy_id,
         policy_stage = policy_stage,
         decision = decision,
-        reason = policy_grant.reason().unwrap_or(""),
-        reason_present = policy_grant.reason().is_some(),
-        predicate = policy_grant.predicate().unwrap_or(""),
-        predicate_present = policy_grant.predicate().is_some(),
+        reason = policy_grant.reason(),
+        predicate = policy_grant.predicate(),
     );
 }
 
 pub(crate) fn execute_start(action_kind: &str, grant_id: GrantId, resource: &AuditResource) {
-    log_action_event(
-        EVENT_EXECUTE_START,
-        action_kind,
-        Some(grant_id),
-        resource,
-        None,
-        None,
-    );
+    log_action_event(EVENT_EXECUTE_START, action_kind, Some(grant_id), resource);
 }
 
 pub(crate) fn execute_finish(action_kind: &str, grant_id: GrantId, resource: &AuditResource) {
-    log_action_event(
-        EVENT_EXECUTE_FINISH,
-        action_kind,
-        Some(grant_id),
-        resource,
-        None,
-        None,
-    );
+    log_action_event(EVENT_EXECUTE_FINISH, action_kind, Some(grant_id), resource);
 }
 
 pub(crate) fn execute_error(
@@ -272,13 +244,19 @@ pub(crate) fn execute_error(
     resource: &AuditResource,
     error: &ExecutionError,
 ) {
-    log_action_event(
-        EVENT_EXECUTE_ERROR,
-        action_kind,
-        Some(grant_id),
-        resource,
-        None,
-        Some(error),
+    let (resource_kind, resource_value) = serialize_resource(resource);
+    let error = format!("{error:?}");
+
+    info!(
+        target: AUDIT_TARGET,
+        event = EVENT_EXECUTE_ERROR,
+        phase = PHASE_EXECUTE,
+        action = action_kind,
+        grant_id = grant_id.get(),
+        resource_kind = resource_kind,
+        resource = %resource_value,
+        reason = Empty,
+        error = error,
     );
 }
 
@@ -287,14 +265,9 @@ fn log_action_event(
     action_kind: &str,
     grant_id: Option<GrantId>,
     resource: &AuditResource,
-    reason: Option<&str>,
-    error: Option<&ExecutionError>,
 ) {
     let grant_id = grant_id.map(GrantId::get);
-    let grant_id_present = grant_id.is_some();
-    let grant_id = grant_id.unwrap_or(0);
     let (resource_kind, resource_value) = serialize_resource(resource);
-    let error = error.map(|error| format!("{error:?}"));
 
     info!(
         target: AUDIT_TARGET,
@@ -302,13 +275,9 @@ fn log_action_event(
         phase = PHASE_EXECUTE,
         action = action_kind,
         grant_id = grant_id,
-        grant_id_present = grant_id_present,
         resource_kind = resource_kind,
         resource = %resource_value,
-        reason = reason.unwrap_or(""),
-        reason_present = reason.is_some(),
-        error = error.as_deref().unwrap_or(""),
-        error_present = error.is_some(),
+        reason = Empty,
     );
 }
 

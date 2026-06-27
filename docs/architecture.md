@@ -141,9 +141,19 @@ authorization fact.
 
 Audit events use stable dot-separated names such as `grant.allow`,
 `grant.deny`, `policy.evaluate`, `execute.start`, `execute.finish`, and
-`execute.error`. Optional values are emitted with explicit presence fields, for
-example `grant_id` plus `grant_id_present`, so JSON and OTel consumers do not
-need to parse `Some(...)` / `None` debug strings.
+`execute.error`. Optional values are emitted only when present, so JSON and OTel
+consumers do not need to parse `Some(...)` / `None` debug strings or filter
+empty sentinel values.
+
+`examples/demo.rs` can emit newline-delimited JSON with span metadata by setting
+`MVP_LOG_FORMAT=json`; the default subscriber remains the existing human-readable
+formatter.
+
+The demo can also export OpenTelemetry traces by setting
+`MVP_TRACE_EXPORTER=otlp`. This installs an OTel trace layer alongside the fmt
+layer and sends OTLP to `OTEL_EXPORTER_OTLP_ENDPOINT`, defaulting to
+`http://localhost:4318/v1/traces` with OTLP/HTTP. Jaeger's `4317` port is
+OTLP/gRPC; `4318` is OTLP/HTTP.
 
 Code:
 - `crates/kernel/src/audit.rs`
