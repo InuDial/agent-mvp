@@ -228,20 +228,26 @@ impl ToolContext<App> for AppToolContext<'_> {
     }
 }
 
-impl HasFsAccess<App> for AppToolContext<'_> {
-    fn fs(&self) -> FsAccess<'_, App> {
+impl HasFsAccess for AppToolContext<'_> {
+    type Host = App;
+
+    fn fs(&self) -> FsAccess<'_, Self::Host> {
         FsAccess::new(self.app, self.workspace_root(), self.policy_context())
     }
 }
 
-impl HasNetworkAccess<App> for AppToolContext<'_> {
-    fn network(&self) -> NetworkAccess<'_, App> {
+impl HasNetworkAccess for AppToolContext<'_> {
+    type Host = App;
+
+    fn network(&self) -> NetworkAccess<'_, Self::Host> {
         NetworkAccess::new(self.app, self.policy_context())
     }
 }
 
-impl HasMontySessionAccess<App> for AppToolContext<'_> {
-    fn monty_sessions(&self) -> MontySessionAccess<'_, App> {
+impl HasMontySessionAccess for AppToolContext<'_> {
+    type Host = App;
+
+    fn monty_sessions(&self) -> MontySessionAccess<'_, Self::Host> {
         MontySessionAccess::new(self.app, self.workspace_root(), self.policy_context())
     }
 }
@@ -319,7 +325,7 @@ impl ToolHost for App {
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use mvp_access_fs::{AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, FsBackend};
+    use mvp_access_fs::{AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy};
     use mvp_contract::{
         Capabilities, Capability, InvocationParams, OutputClassification, ToolOutcome, ToolSpec,
     };
@@ -402,8 +408,8 @@ mod tests {
     #[async_trait]
     impl<H> ToolImpl<H> for ReadWorkspaceFileTool
     where
-        H: ToolHost + FsBackend,
-        for<'a> H::ToolCx<'a>: HasFsAccess<H>,
+        H: ToolHost,
+        for<'a> H::ToolCx<'a>: HasFsAccess,
     {
         type Input = String;
         type Output = ToolOutcome;

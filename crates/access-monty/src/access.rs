@@ -8,11 +8,10 @@ use mvp_core::{
 use crate::{MontySessionKey, MontySessionLoadAction, MontySessionSaveAction, MontySessionStore};
 
 /// Tool-context extension used by Monty tools to read and persist REPL state.
-pub trait HasMontySessionAccess<K>
-where
-    K: HasPolicyEngine + MontySessionStore,
-{
-    fn monty_sessions(&self) -> MontySessionAccess<'_, K>;
+pub trait HasMontySessionAccess {
+    type Host: HasPolicyEngine + MontySessionStore;
+
+    fn monty_sessions(&self) -> MontySessionAccess<'_, Self::Host>;
 }
 
 pub struct MontySessionAccess<'a, K>

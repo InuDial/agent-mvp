@@ -93,8 +93,10 @@ impl ToolContext<TestKernel> for UnusedToolContext<'_> {
     }
 }
 
-impl HasFsAccess<TestKernel> for UnusedToolContext<'_> {
-    fn fs(&self) -> FsAccess<'_, TestKernel> {
+impl HasFsAccess for UnusedToolContext<'_> {
+    type Host = TestKernel;
+
+    fn fs(&self) -> FsAccess<'_, Self::Host> {
         FsAccess::new(self.kernel, self.workspace_root(), self.policy_context())
     }
 }

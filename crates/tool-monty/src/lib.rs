@@ -7,8 +7,8 @@ use monty::{
     DictPairs, ExcType, ExtFunctionResult, LimitedTracker, MontyException, MontyObject, MontyRepl,
     NameLookupResult, PrintWriter, ReplProgress, ResourceLimits,
 };
-use mvp_access_fs::{FsBackend, HasFsAccess};
-use mvp_access_monty::{HasMontySessionAccess, MontySessionStore};
+use mvp_access_fs::HasFsAccess;
+use mvp_access_monty::HasMontySessionAccess;
 use mvp_contract::{Capabilities, OutputClassification, ToolOutcome, ToolSpec};
 use mvp_core::{
     error::{ExecutionError, InputError, ToolError},
@@ -242,8 +242,8 @@ impl MontyTool {
 #[async_trait]
 impl<K> ToolImpl<K> for MontyTool
 where
-    K: ToolHost + MontySessionStore,
-    for<'a> K::ToolCx<'a>: HasMontySessionAccess<K>,
+    K: ToolHost,
+    for<'a> K::ToolCx<'a>: HasMontySessionAccess,
 {
     type Input = MontyInput;
     type Output = ToolOutcome;
@@ -310,8 +310,8 @@ where
 #[async_trait]
 impl<K> ToolImpl<K> for MontyOsTool
 where
-    K: ToolHost + FsBackend,
-    for<'a> K::ToolCx<'a>: HasFsAccess<K>,
+    K: ToolHost,
+    for<'a> K::ToolCx<'a>: HasFsAccess,
 {
     type Input = MontyOsInput;
     type Output = ToolOutcome;
@@ -751,14 +751,18 @@ mod tests {
         }
     }
 
-    impl HasFsAccess<TestKernel> for TestToolContext<'_> {
-        fn fs(&self) -> FsAccess<'_, TestKernel> {
+    impl HasFsAccess for TestToolContext<'_> {
+        type Host = TestKernel;
+
+        fn fs(&self) -> FsAccess<'_, Self::Host> {
             FsAccess::new(self.kernel, self.workspace_root(), self.policy_context())
         }
     }
 
-    impl HasMontySessionAccess<TestKernel> for TestToolContext<'_> {
-        fn monty_sessions(&self) -> MontySessionAccess<'_, TestKernel> {
+    impl HasMontySessionAccess for TestToolContext<'_> {
+        type Host = TestKernel;
+
+        fn monty_sessions(&self) -> MontySessionAccess<'_, Self::Host> {
             MontySessionAccess::new(self.kernel, self.workspace_root(), self.policy_context())
         }
     }

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use mvp_access_fs::{FsBackend, HasFsAccess};
+use mvp_access_fs::HasFsAccess;
 use mvp_contract::{Capability, OutputClassification, ToolOutcome, ToolSpec};
 use mvp_core::error::{InputError, ToolError};
 use mvp_core::tool::ToolHost;
@@ -28,8 +28,8 @@ impl From<ReadFileOutput> for ToolOutcome {
 #[async_trait]
 impl<K> ToolImpl<K> for ReadFileTool
 where
-    K: ToolHost + FsBackend,
-    for<'a> K::ToolCx<'a>: HasFsAccess<K>,
+    K: ToolHost,
+    for<'a> K::ToolCx<'a>: HasFsAccess,
 {
     type Input = ReadFileInput;
     type Output = ReadFileOutput;

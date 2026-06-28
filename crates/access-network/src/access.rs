@@ -5,11 +5,10 @@ use mvp_core::{
 
 use crate::{NetworkBackend, NetworkFetchAction};
 
-pub trait HasNetworkAccess<K>
-where
-    K: NetworkBackend + HasPolicyEngine,
-{
-    fn network(&self) -> NetworkAccess<'_, K>;
+pub trait HasNetworkAccess {
+    type Host: NetworkBackend + HasPolicyEngine;
+
+    fn network(&self) -> NetworkAccess<'_, Self::Host>;
 }
 
 /// Network access facade exposed as `ctx.network()`.

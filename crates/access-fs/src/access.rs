@@ -7,11 +7,10 @@ use mvp_core::{
 
 use crate::{CanonicalRoot, FsAction, FsBackend, FsReadAction, FsWriteAction, action};
 
-pub trait HasFsAccess<K>
-where
-    K: FsBackend + HasPolicyEngine,
-{
-    fn fs(&self) -> FsAccess<'_, K>;
+pub trait HasFsAccess {
+    type Host: FsBackend + HasPolicyEngine;
+
+    fn fs(&self) -> FsAccess<'_, Self::Host>;
 }
 
 /// Filesystem access facade exposed as `ctx.fs()`.

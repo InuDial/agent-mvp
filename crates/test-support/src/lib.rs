@@ -239,14 +239,18 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
     }
 }
 
-impl HasFsAccess<MockKernel> for MockToolContext<'_> {
-    fn fs(&self) -> FsAccess<'_, MockKernel> {
+impl HasFsAccess for MockToolContext<'_> {
+    type Host = MockKernel;
+
+    fn fs(&self) -> FsAccess<'_, Self::Host> {
         FsAccess::new(self.kernel, self.workspace_root(), self.policy_context())
     }
 }
 
-impl HasNetworkAccess<MockKernel> for MockToolContext<'_> {
-    fn network(&self) -> NetworkAccess<'_, MockKernel> {
+impl HasNetworkAccess for MockToolContext<'_> {
+    type Host = MockKernel;
+
+    fn network(&self) -> NetworkAccess<'_, Self::Host> {
         NetworkAccess::new(self.kernel, self.policy_context())
     }
 }

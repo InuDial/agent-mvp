@@ -93,8 +93,10 @@ impl ToolContext<TestKernel> for UnusedToolContext<'_> {
     }
 }
 
-impl HasNetworkAccess<TestKernel> for UnusedToolContext<'_> {
-    fn network(&self) -> NetworkAccess<'_, TestKernel> {
+impl HasNetworkAccess for UnusedToolContext<'_> {
+    type Host = TestKernel;
+
+    fn network(&self) -> NetworkAccess<'_, Self::Host> {
         NetworkAccess::new(self.kernel, self.policy_context())
     }
 }
