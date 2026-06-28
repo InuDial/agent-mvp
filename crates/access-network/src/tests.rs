@@ -5,8 +5,9 @@ use mvp_core::error::{InputError, ToolError};
 use mvp_core::policy::HasPolicyEngine;
 use mvp_core::tool::ToolHost;
 use mvp_core::tool::{ToolContext, ToolRegistration};
-use mvp_kernel::pipeline::CapabilityEnvelopePolicy;
-use mvp_kernel::policy_context::{KernelPolicyContext, KernelPolicyContextFactory};
+use mvp_kernel::policy::{
+    CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory,
+};
 use mvp_test_support::TestPolicyPipeline;
 use serde_json::Value;
 use std::path::{Path, PathBuf};

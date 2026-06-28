@@ -34,7 +34,7 @@ If you want to jump straight into code, read in this order:
 2. `crates/core/src/action.rs`
 3. `crates/core/src/policy/traits.rs`
 4. `crates/core/src/policy/grant.rs`
-5. `crates/kernel/src/pipeline/mod.rs`
+5. `crates/kernel/src/policy/pipeline.rs`
 6. `crates/access-fs/src/access.rs`
 7. `crates/access-fs/src/action.rs`
 8. `crates/access-fs/src/policy.rs`

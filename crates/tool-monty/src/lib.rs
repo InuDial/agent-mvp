@@ -591,8 +591,7 @@ mod tests {
     };
     use mvp_kernel::{
         audit,
-        pipeline::CapabilityEnvelopePolicy,
-        policy_context::{KernelPolicyContext, KernelPolicyContextFactory},
+        policy::{CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory},
     };
     use mvp_test_support::{TempWorkspace, TestPolicyPipeline};
     use std::collections::BTreeMap;

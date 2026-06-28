@@ -14,8 +14,9 @@ use mvp_core::{
     tool::ToolHost,
 };
 use mvp_kernel::audit;
-use mvp_kernel::pipeline::{CapabilityEnvelopePolicy, PolicyPipeline};
-use mvp_kernel::policy_context::{KernelPolicyContext, KernelPolicyContextFactory};
+use mvp_kernel::policy::{
+    CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPipeline,
+};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

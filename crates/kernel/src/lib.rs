@@ -5,6 +5,5 @@
 //! live in `mvp-core`; protocol data lives in `mvp-contract`.
 
 pub mod audit;
-pub mod pipeline;
-pub mod policy_context;
+pub mod policy;
 pub mod runtime;

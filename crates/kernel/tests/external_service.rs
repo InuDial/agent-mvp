@@ -5,7 +5,7 @@ use mvp_contract::{
 use mvp_core::action::{Action, ActionExecutor};
 use mvp_core::error::ExecutionError;
 use mvp_core::policy::{Granted, Policy, PolicyEngine};
-use mvp_kernel::policy_context::{KernelPolicyContext, KernelPolicyContextFactory};
+use mvp_kernel::policy::{KernelPolicyContext, KernelPolicyContextFactory};
 
 struct ExternalEchoService<'a, E> {
     policy: &'a E,

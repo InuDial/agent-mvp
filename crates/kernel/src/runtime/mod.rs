@@ -11,8 +11,7 @@ use tracing::Instrument;
 
 use crate::{
     audit,
-    pipeline::{CapabilityEnvelopePolicy, PolicyPipeline},
-    policy_context::KernelPolicyContextFactory,
+    policy::{CapabilityEnvelopePolicy, KernelPolicyContextFactory, PolicyPipeline},
 };
 
 pub struct KernelRuntime {

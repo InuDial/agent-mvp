@@ -10,7 +10,7 @@ use mvp_core::error::{InputError, ToolError};
 use mvp_core::policy::{HasPolicyEngine, PolicyEngine};
 use mvp_core::tool::ToolHost;
 use mvp_core::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
-use mvp_kernel::policy_context::{KernelPolicyContext, KernelPolicyContextFactory};
+use mvp_kernel::policy::{KernelPolicyContext, KernelPolicyContextFactory};
 use serde_json::{Value, json};
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]

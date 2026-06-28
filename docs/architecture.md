@@ -103,7 +103,7 @@ policies.
 
 Code:
 - `crates/core/src/policy/traits.rs`
-- `crates/kernel/src/pipeline/mod.rs`
+- `crates/kernel/src/policy/pipeline.rs`
 - `crates/access-fs/src/policy.rs`
 - `crates/access-network/src/policy.rs`
 - `crates/access-monty/src/policy.rs`
@@ -207,7 +207,7 @@ exceed the current effective envelope.
 
 Code:
 - `crates/contract/src/lib.rs`
-- `crates/kernel/src/pipeline/mod.rs`
+- `crates/kernel/src/policy/builtins.rs`
 - `crates/app/src/lib.rs`
 
 ## Where To Start Reading
@@ -218,7 +218,7 @@ Read in this order:
 2. `crates/core/src/action.rs`
 3. `crates/core/src/policy/traits.rs`
 4. `crates/core/src/policy/grant.rs`
-5. `crates/kernel/src/pipeline/mod.rs`
+5. `crates/kernel/src/policy/pipeline.rs`
 6. `crates/access-fs/src/access.rs`
 7. `crates/access-fs/src/action.rs`
 8. `crates/access-fs/src/policy.rs`

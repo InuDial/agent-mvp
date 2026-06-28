@@ -13,8 +13,7 @@ use mvp_core::{
 };
 use mvp_kernel::{
     audit,
-    pipeline::PolicyPipeline,
-    policy_context::{KernelPolicyContext, KernelPolicyContextFactory},
+    policy::{KernelPolicyContext, KernelPolicyContextFactory, PolicyPipeline},
     runtime::KernelRuntime,
 };
 use serde_json::Value;
