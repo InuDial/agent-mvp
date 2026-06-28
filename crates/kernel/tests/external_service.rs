@@ -1,11 +1,11 @@
 use async_trait::async_trait;
-use mvp_contract::Capabilities;
-use mvp_kernel::action::{Action, ActionExecutor, AuditResource};
-use mvp_kernel::error::ExecutionError;
-use mvp_kernel::policy::{
-    Granted, KernelPolicyContext, KernelPolicyContextFactory, Policy, PolicyDecision, PolicyEngine,
-    PolicyEvaluation, PolicyGrant, PolicyReport,
+use mvp_contract::{
+    AuditResource, Capabilities, PolicyDecision, PolicyEvaluation, PolicyGrant, PolicyReport,
 };
+use mvp_core::action::{Action, ActionExecutor};
+use mvp_core::error::ExecutionError;
+use mvp_core::policy::{Granted, Policy, PolicyEngine};
+use mvp_kernel::policy_context::{KernelPolicyContext, KernelPolicyContextFactory};
 
 struct ExternalEchoService<'a, E> {
     policy: &'a E,

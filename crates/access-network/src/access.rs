@@ -1,13 +1,13 @@
-use mvp_kernel::error::ExecutionError;
-use mvp_kernel::kernel::{Kernel, PolicyContextFor};
-use mvp_kernel::policy::PolicyEngine;
-use mvp_kernel::tool::ToolContext;
+use mvp_core::{
+    error::ExecutionError,
+    policy::{HasPolicyEngine, PolicyContextFor, PolicyEngine},
+};
 
 use crate::{NetworkBackend, NetworkFetchAction};
 
-pub trait HasNetworkAccess<K>: ToolContext<K>
+pub trait HasNetworkAccess<K>
 where
-    K: NetworkBackend + Kernel,
+    K: NetworkBackend + HasPolicyEngine,
 {
     fn network(&self) -> NetworkAccess<'_, K>;
 }
@@ -16,10 +16,10 @@ where
 ///
 /// Public methods remain natural and function-like. Internally they follow the
 /// same pipeline: construct an action, ask policy to grant it, then execute the
-/// granted action. Grant / execute audit stays in the shared policy/action core.
+/// granted action. Concrete runtimes can wrap grant / execute with audit.
 pub struct NetworkAccess<'a, K>
 where
-    K: Kernel + NetworkBackend + ?Sized,
+    K: HasPolicyEngine + NetworkBackend + ?Sized,
 {
     kernel: &'a K,
     policy_context: PolicyContextFor<'a, K>,
@@ -27,7 +27,7 @@ where
 
 impl<'a, K> NetworkAccess<'a, K>
 where
-    K: Kernel + NetworkBackend,
+    K: HasPolicyEngine + NetworkBackend,
 {
     pub fn new(kernel: &'a K, policy_context: PolicyContextFor<'a, K>) -> Self {
         Self {
@@ -46,6 +46,6 @@ where
             .map_err(ExecutionError::Authorization)?;
 
         let executor: &dyn NetworkBackend = self.kernel;
-        granted.execute_with(executor).await
+        self.kernel.execute_granted(granted, executor).await
     }
 }

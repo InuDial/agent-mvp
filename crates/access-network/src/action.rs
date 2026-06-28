@@ -1,6 +1,5 @@
-use mvp_contract::{Capabilities, Capability};
-
-use mvp_kernel::action::{Action, AuditResource};
+use mvp_contract::{AuditResource, Capabilities, Capability};
+use mvp_core::action::Action;
 
 #[derive(Clone, Debug)]
 pub struct NetworkFetchAction {

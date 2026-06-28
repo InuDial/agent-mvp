@@ -1,19 +1,7 @@
 use std::path::Path;
 
 use mvp_contract::Capabilities;
-
-pub trait PolicyContext: Send + Sync {
-    fn capabilities(&self) -> &Capabilities;
-}
-
-/// A wrapper over PolicyContext to make it 'static
-pub trait PolicyContextFactory: 'static {
-    type Context<'a>: PolicyContext;
-}
-
-pub trait WorkspacePolicyContext: PolicyContext {
-    fn workspace_root(&self) -> &Path;
-}
+use mvp_core::policy::{PolicyContext, PolicyContextFactory, WorkspacePolicyContext};
 
 pub struct KernelPolicyContext<'a> {
     capabilities: Capabilities,

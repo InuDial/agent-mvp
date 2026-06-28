@@ -7,6 +7,7 @@ publish = false
 [workspace]
 members = [
     "crates/contract",
+    "crates/core",
     "crates/kernel",
     "crates/access-fs",
     "crates/access-monty",
@@ -19,6 +20,7 @@ members = [
 default-members = [
     ".",
     "crates/contract",
+    "crates/core",
     "crates/kernel",
     "crates/access-fs",
     "crates/access-monty",
@@ -43,6 +45,7 @@ opentelemetry-otlp = { version = "0.32", default-features = false, features = ["
 opentelemetry_sdk = { version = "0.32", features = ["trace", "rt-tokio"] }
 bitflags = "2.13.0"
 mvp-contract = { path = "crates/contract" }
+mvp-core = { path = "crates/core" }
 mvp-kernel = { path = "crates/kernel" }
 mvp-access-fs = { path = "crates/access-fs" }
 mvp-access-monty = { path = "crates/access-monty" }
@@ -56,6 +59,7 @@ mvp-tool-monty = { path = "crates/tool-monty" }
 serde_json.workspace = true
 tokio.workspace = true
 mvp-contract.workspace = true
+mvp-core.workspace = true
 mvp-kernel.workspace = true
 mvp-access-fs.workspace = true
 mvp-access-monty.workspace = true

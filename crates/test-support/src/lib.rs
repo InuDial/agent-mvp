@@ -7,22 +7,22 @@ use mvp_access_network::{
     HasNetworkAccess, HasNetworkBackend, NetworkAccess, StaticNetworkBackend,
 };
 use mvp_contract::{Capabilities, InvocationParams, ToolOutcome, ToolSpec};
-use mvp_kernel::kernel::Kernel;
-use mvp_kernel::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
-use mvp_kernel::{
-    audit,
+use mvp_core::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
+use mvp_core::{
     error::{AuthorizationError, ToolError},
-    policy::{KernelPolicyContext, KernelPolicyContextFactory},
+    policy::HasPolicyEngine,
+    tool::ToolHost,
 };
+use mvp_kernel::audit;
+use mvp_kernel::pipeline::{CapabilityEnvelopePolicy, PolicyPipeline};
+use mvp_kernel::policy_context::{KernelPolicyContext, KernelPolicyContextFactory};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub mod policy_pipeline;
-
-pub use policy_pipeline::{CapabilityEnvelopePolicy, TestPolicyPipeline};
+pub type TestPolicyPipeline<F> = PolicyPipeline<F>;
 
 static NEXT_TEST_WORKSPACE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -103,7 +103,7 @@ impl MockKernel {
 
     pub fn register<T: ToolImpl<Self>>(
         &mut self,
-        path: <Self as Kernel>::ToolPath,
+        path: <Self as ToolHost>::ToolPath,
         tool: T,
     ) -> Result<(), ToolError> {
         if self.tools.contains_key(&path) {
@@ -140,7 +140,7 @@ impl HasNetworkBackend for MockKernel {
 
 pub struct MockToolContext<'a> {
     kernel: &'a MockKernel,
-    tool_path: &'a <MockKernel as Kernel>::ToolPath,
+    tool_path: &'a <MockKernel as ToolHost>::ToolPath,
     registration: &'a ToolRegistration,
     effective_capabilities: Capabilities,
     canonical_workspace_root: CanonicalRoot,
@@ -149,7 +149,7 @@ pub struct MockToolContext<'a> {
 impl<'a> MockToolContext<'a> {
     fn new(
         kernel: &'a MockKernel,
-        tool_path: &'a <MockKernel as Kernel>::ToolPath,
+        tool_path: &'a <MockKernel as ToolHost>::ToolPath,
         registration: &'a ToolRegistration,
         params: &'a InvocationParams,
     ) -> Result<Self, AuthorizationError> {
@@ -183,7 +183,7 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
         self.effective_capabilities
     }
 
-    fn tool_path(&self) -> &<MockKernel as Kernel>::ToolPath {
+    fn tool_path(&self) -> &<MockKernel as ToolHost>::ToolPath {
         self.tool_path
     }
 
@@ -197,7 +197,7 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
 
     async fn invoke_tool(
         &self,
-        path: <MockKernel as Kernel>::ToolPath,
+        path: <MockKernel as ToolHost>::ToolPath,
         capabilities_override: Option<Capabilities>,
         payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
@@ -250,28 +250,31 @@ impl HasNetworkAccess<MockKernel> for MockToolContext<'_> {
     }
 }
 
-#[async_trait]
-impl Kernel for MockKernel {
+impl HasPolicyEngine for MockKernel {
     type PolicyCxFactory = KernelPolicyContextFactory;
     type PolicyEngine<'a>
         = TestPolicyPipeline<KernelPolicyContextFactory>
-    where
-        Self: 'a;
-    type ToolPath = String;
-    type ToolCx<'a>
-        = MockToolContext<'a>
     where
         Self: 'a;
 
     fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
         &self.policy
     }
+}
 
-    fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, mvp_kernel::error::InputError> {
+#[async_trait]
+impl ToolHost for MockKernel {
+    type ToolPath = String;
+    type ToolCx<'a>
+        = MockToolContext<'a>
+    where
+        Self: 'a;
+
+    fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, mvp_core::error::InputError> {
         value
             .as_str()
             .map(ToOwned::to_owned)
-            .ok_or(mvp_kernel::error::InputError::InvalidField("tool_path"))
+            .ok_or(mvp_core::error::InputError::InvalidField("tool_path"))
     }
 
     async fn invoke(

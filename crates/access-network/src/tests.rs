@@ -1,10 +1,13 @@
 use async_trait::async_trait;
 use mvp_contract::{Capabilities, Capability, InvocationParams, ToolOutcome, ToolSpec};
-use mvp_kernel::error::{AuthorizationError, ExecutionError, InputError, ToolError};
-use mvp_kernel::kernel::Kernel;
-use mvp_kernel::policy::{KernelPolicyContext, KernelPolicyContextFactory};
-use mvp_kernel::tool::{ToolContext, ToolRegistration};
-use mvp_test_support::{CapabilityEnvelopePolicy, TestPolicyPipeline};
+use mvp_core::error::{AuthorizationError, ExecutionError};
+use mvp_core::error::{InputError, ToolError};
+use mvp_core::policy::HasPolicyEngine;
+use mvp_core::tool::ToolHost;
+use mvp_core::tool::{ToolContext, ToolRegistration};
+use mvp_kernel::pipeline::CapabilityEnvelopePolicy;
+use mvp_kernel::policy_context::{KernelPolicyContext, KernelPolicyContextFactory};
+use mvp_test_support::TestPolicyPipeline;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -67,7 +70,7 @@ impl ToolContext<TestKernel> for UnusedToolContext<'_> {
         self.registration
     }
 
-    fn tool_path(&self) -> &<TestKernel as Kernel>::ToolPath {
+    fn tool_path(&self) -> &<TestKernel as ToolHost>::ToolPath {
         &self.tool_path
     }
 
@@ -81,7 +84,7 @@ impl ToolContext<TestKernel> for UnusedToolContext<'_> {
 
     async fn invoke_tool(
         &self,
-        _path: <TestKernel as Kernel>::ToolPath,
+        _path: <TestKernel as ToolHost>::ToolPath,
         _capabilities_override: Option<Capabilities>,
         _payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
@@ -116,23 +119,25 @@ impl HasNetworkBackend for TestKernel {
     }
 }
 
-#[async_trait]
-impl Kernel for TestKernel {
+impl HasPolicyEngine for TestKernel {
     type PolicyCxFactory = KernelPolicyContextFactory;
     type PolicyEngine<'a>
         = TestPolicyPipeline<KernelPolicyContextFactory>
     where
         Self: 'a;
 
+    fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
+        &self.policy
+    }
+}
+
+#[async_trait]
+impl ToolHost for TestKernel {
     type ToolPath = String;
     type ToolCx<'a>
         = UnusedToolContext<'a>
     where
         Self: 'a;
-
-    fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
-        &self.policy
-    }
 
     fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, InputError> {
         value

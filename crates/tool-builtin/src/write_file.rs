@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use mvp_access_fs::{FsBackend, HasFsAccess};
 use mvp_contract::{Capability, OutputClassification, ToolOutcome, ToolSpec};
-use mvp_kernel::error::{InputError, ToolError};
-use mvp_kernel::kernel::Kernel;
-use mvp_kernel::tool::ToolImpl;
+use mvp_core::error::{InputError, ToolError};
+use mvp_core::tool::ToolHost;
+use mvp_core::tool::ToolImpl;
 use serde_json::{Value, json};
 
 pub struct WriteFileTool;
@@ -27,7 +27,7 @@ impl From<WriteFileOutput> for ToolOutcome {
 #[async_trait]
 impl<K> ToolImpl<K> for WriteFileTool
 where
-    K: Kernel + FsBackend,
+    K: ToolHost + FsBackend,
     for<'a> K::ToolCx<'a>: HasFsAccess<K>,
 {
     type Input = WriteFileInput;
@@ -75,7 +75,8 @@ mod tests {
     use super::*;
     use mvp_access_fs::AllowWorkspaceWritePolicy;
     use mvp_contract::InvocationParams;
-    use mvp_kernel::error::{AuthorizationError, ToolError};
+    use mvp_core::error::ToolError;
+    use mvp_core::error::{AuthorizationError, ExecutionError};
     use mvp_test_support::{MockKernel, TempWorkspace};
 
     #[tokio::test]
@@ -90,7 +91,7 @@ mod tests {
         kernel.policy.append(AllowWorkspaceWritePolicy);
 
         let params = InvocationParams::new(&ws.root, None);
-        let outcome = mvp_kernel::kernel::Kernel::invoke(
+        let outcome = mvp_core::tool::ToolHost::invoke(
             &kernel,
             &"write_file".to_string(),
             &params,
@@ -120,7 +121,7 @@ mod tests {
             .unwrap();
 
         let params = InvocationParams::new(&ws.root, None);
-        let denied = mvp_kernel::kernel::Kernel::invoke(
+        let denied = mvp_core::tool::ToolHost::invoke(
             &kernel,
             &"write_file".to_string(),
             &params,
@@ -133,9 +134,9 @@ mod tests {
 
         assert!(matches!(
             denied,
-            Err(ToolError::Execution(
-                mvp_kernel::error::ExecutionError::Authorization(AuthorizationError::Denied(_))
-            ))
+            Err(ToolError::Execution(ExecutionError::Authorization(
+                AuthorizationError::Denied(_)
+            )))
         ));
         assert!(!ws.root.join("hello.txt").exists());
     }

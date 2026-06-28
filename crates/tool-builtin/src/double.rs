@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use mvp_contract::{ToolOutcome, ToolSpec};
-use mvp_kernel::error::{InputError, ToolError};
-use mvp_kernel::kernel::Kernel;
-use mvp_kernel::tool::{ToolContext, ToolImpl};
+use mvp_core::error::{InputError, ToolError};
+use mvp_core::tool::ToolHost;
+use mvp_core::tool::{ToolContext, ToolImpl};
 use serde_json::Value;
 
 pub struct Double;
@@ -10,7 +10,7 @@ pub struct Double;
 #[async_trait]
 impl<K> ToolImpl<K> for Double
 where
-    K: Kernel,
+    K: ToolHost,
 {
     type Input = (K::ToolPath, Value);
     type Output = ToolOutcome;
@@ -56,7 +56,8 @@ mod tests {
     use mvp_access_fs::AllowWorkspaceReadPolicy;
     use mvp_contract::InvocationParams;
     use mvp_contract::{Capabilities, Capability, OutputClassification};
-    use mvp_kernel::error::{AuthorizationError, ToolError};
+    use mvp_core::error::AuthorizationError;
+    use mvp_core::error::ToolError;
     use mvp_test_support::{MockKernel, TempWorkspace};
     use serde_json::json;
 
@@ -65,7 +66,7 @@ mod tests {
     #[async_trait]
     impl<K> ToolImpl<K> for EscalatingInvokeTool
     where
-        K: Kernel<ToolPath = String>,
+        K: ToolHost<ToolPath = String>,
         for<'a> K::ToolCx<'a>: ToolContext<K>,
     {
         type Input = (K::ToolPath, Value);
@@ -116,7 +117,7 @@ mod tests {
         kernel.policy.append(AllowWorkspaceReadPolicy);
 
         let params = InvocationParams::new(&ws.root, Some([Capability::FsRead].into()));
-        let outcome = mvp_kernel::kernel::Kernel::invoke(
+        let outcome = mvp_core::tool::ToolHost::invoke(
             &kernel,
             &"double".to_string(),
             &params,
@@ -147,7 +148,7 @@ mod tests {
         kernel.policy.append(AllowWorkspaceReadPolicy);
 
         let params = InvocationParams::new(&ws.root, None);
-        let denied = mvp_kernel::kernel::Kernel::invoke(
+        let denied = mvp_core::tool::ToolHost::invoke(
             &kernel,
             &"escalate_invoke".to_string(),
             &params,

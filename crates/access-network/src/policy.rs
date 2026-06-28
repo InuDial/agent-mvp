@@ -6,7 +6,8 @@
 
 use async_trait::async_trait;
 
-use mvp_kernel::policy::{Policy, PolicyContextFactory, PolicyGrant};
+use mvp_contract::PolicyGrant;
+use mvp_core::policy::{Policy, PolicyContextFactory};
 
 use super::action::NetworkFetchAction;
 

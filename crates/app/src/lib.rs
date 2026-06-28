@@ -1,34 +1,38 @@
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 use async_trait::async_trait;
-use mvp_access_fs::{CanonicalRoot, FsAccess, HasFsAccess, HasFsBackend, StdFsBackend};
-use mvp_access_monty::{
-    HasMontySessionAccess, HasMontySessionStore, MemoryMontySessionStore, MontySessionAccess,
+use mvp_access_fs::{
+    AllowFileReadPrefixPolicy, AllowFileWritePrefixPolicy, AllowWorkspaceFsPolicy,
+    AllowWorkspaceReadPolicy, CanonicalRoot, FsAccess, HasFsAccess, HasFsBackend,
 };
-use mvp_access_network::{DenyNetworkBackend, HasNetworkAccess, HasNetworkBackend, NetworkAccess};
+use mvp_access_monty::{
+    AllowMontySessionPolicy, HasMontySessionAccess, HasMontySessionStore, MontySessionAccess,
+    MontySessionLoadAction, MontySessionSaveAction,
+};
+use mvp_access_network::{
+    AllowDomainFetchPolicy, HasNetworkAccess, HasNetworkBackend, NetworkAccess,
+};
 use mvp_contract::{Capabilities, InvocationParams, ToolOutcome};
+use mvp_core::{
+    action::{Action, ActionExecutor},
+    error::{AuthorizationError, ExecutionError, InputError, ToolError},
+    policy::{Granted, HasPolicyEngine},
+    tool::{RegisteredTool, ToolContext, ToolHost, ToolImpl, ToolRegistration},
+};
 use mvp_kernel::{
     audit,
-    error::{AuthorizationError, InputError, ToolError},
-    kernel::Kernel,
-    policy::{KernelPolicyContext, KernelPolicyContextFactory},
-    tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
+    pipeline::PolicyPipeline,
+    policy_context::{KernelPolicyContext, KernelPolicyContextFactory},
+    runtime::KernelRuntime,
 };
+use mvp_tool_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
+use mvp_tool_monty::{MontyOsTool, MontyTool};
 use serde_json::Value;
-
-mod policy_pipeline;
-
-pub use policy_pipeline::{
-    AllowAllPolicy, CapabilityEnvelopePolicy, PolicyAnyWrapper, PolicyPipeline,
-};
+use tracing::Instrument;
 
 pub struct App {
+    kernel: KernelRuntime,
     tools: BTreeMap<String, RegisteredTool<App>>,
-    fs: StdFsBackend,
-    network: DenyNetworkBackend,
-    monty_sessions: MemoryMontySessionStore,
-    pub policy: PolicyPipeline<KernelPolicyContextFactory>,
 }
 
 impl Default for App {
@@ -39,21 +43,31 @@ impl Default for App {
 
 impl App {
     pub fn new() -> Self {
-        let mut policy = PolicyPipeline::new();
-        policy.prepend_inbound(CapabilityEnvelopePolicy);
-
         Self {
+            kernel: KernelRuntime::new(),
             tools: BTreeMap::new(),
-            fs: StdFsBackend,
-            network: DenyNetworkBackend,
-            monty_sessions: MemoryMontySessionStore::new(),
-            policy,
         }
+    }
+
+    pub fn kernel(&self) -> &KernelRuntime {
+        &self.kernel
+    }
+
+    pub fn kernel_mut(&mut self) -> &mut KernelRuntime {
+        &mut self.kernel
+    }
+
+    pub fn policy(&self) -> &PolicyPipeline<KernelPolicyContextFactory> {
+        &self.kernel.policy
+    }
+
+    pub fn policy_mut(&mut self) -> &mut PolicyPipeline<KernelPolicyContextFactory> {
+        &mut self.kernel.policy
     }
 
     pub fn register<T: ToolImpl<Self>>(
         &mut self,
-        path: <Self as Kernel>::ToolPath,
+        path: <Self as ToolHost>::ToolPath,
         tool: T,
     ) -> Result<(), ToolError> {
         if self.tools.contains_key(&path) {
@@ -64,35 +78,70 @@ impl App {
         self.tools.insert(path, registered);
         Ok(())
     }
+
+    pub async fn invoke(
+        &self,
+        path: &<Self as ToolHost>::ToolPath,
+        params: &InvocationParams,
+        payload: Value,
+    ) -> Result<ToolOutcome, ToolError> {
+        <Self as ToolHost>::invoke(self, path, params, payload).await
+    }
 }
 
 impl HasFsBackend for App {
-    type FsBackend = StdFsBackend;
+    type FsBackend = <KernelRuntime as HasFsBackend>::FsBackend;
 
     fn fs_backend(&self) -> &Self::FsBackend {
-        &self.fs
+        self.kernel.fs_backend()
     }
 }
 
 impl HasNetworkBackend for App {
-    type NetworkBackend = DenyNetworkBackend;
+    type NetworkBackend = <KernelRuntime as HasNetworkBackend>::NetworkBackend;
 
     fn network_backend(&self) -> &Self::NetworkBackend {
-        &self.network
+        self.kernel.network_backend()
     }
 }
 
 impl HasMontySessionStore for App {
-    type MontySessionStore = MemoryMontySessionStore;
+    type MontySessionStore = <KernelRuntime as HasMontySessionStore>::MontySessionStore;
 
     fn monty_session_store(&self) -> &Self::MontySessionStore {
-        &self.monty_sessions
+        self.kernel.monty_session_store()
+    }
+}
+
+#[async_trait]
+impl HasPolicyEngine for App {
+    type PolicyCxFactory = KernelPolicyContextFactory;
+    type PolicyEngine<'a>
+        = PolicyPipeline<KernelPolicyContextFactory>
+    where
+        Self: 'a;
+
+    fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
+        self.kernel.policy_engine()
+    }
+
+    async fn execute_granted<A, E>(
+        &self,
+        granted: Granted<A>,
+        executor: &E,
+    ) -> Result<E::Output, ExecutionError>
+    where
+        Self: Sized,
+        A: Action,
+        E: ActionExecutor<A> + ?Sized,
+    {
+        self.kernel.execute_granted(granted, executor).await
     }
 }
 
 pub struct AppToolContext<'a> {
     app: &'a App,
-    tool_path: &'a <App as Kernel>::ToolPath,
+    tool_path: &'a <App as ToolHost>::ToolPath,
     registration: &'a ToolRegistration,
     effective_capabilities: Capabilities,
     canonical_workspace_root: CanonicalRoot,
@@ -101,7 +150,7 @@ pub struct AppToolContext<'a> {
 impl<'a> AppToolContext<'a> {
     fn new(
         app: &'a App,
-        tool_path: &'a <App as Kernel>::ToolPath,
+        tool_path: &'a <App as ToolHost>::ToolPath,
         registration: &'a ToolRegistration,
         params: &'a InvocationParams,
     ) -> Result<Self, AuthorizationError> {
@@ -134,20 +183,22 @@ impl ToolContext<App> for AppToolContext<'_> {
     fn effective_capabilities(&self) -> Capabilities {
         self.effective_capabilities
     }
-    fn tool_path(&self) -> &<App as Kernel>::ToolPath {
+
+    fn tool_path(&self) -> &<App as ToolHost>::ToolPath {
         self.tool_path
     }
 
     fn registration(&self) -> &ToolRegistration {
         self.registration
     }
+
     fn workspace_root(&self) -> &Path {
         self.canonical_workspace_root.as_path()
     }
 
     async fn invoke_tool(
         &self,
-        path: <App as Kernel>::ToolPath,
+        path: <App as ToolHost>::ToolPath,
         capabilities_override: Option<Capabilities>,
         payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
@@ -207,22 +258,12 @@ impl HasMontySessionAccess<App> for AppToolContext<'_> {
 }
 
 #[async_trait]
-impl Kernel for App {
-    type PolicyCxFactory = KernelPolicyContextFactory;
-    type PolicyEngine<'a>
-        = PolicyPipeline<KernelPolicyContextFactory>
-    where
-        Self: 'a;
-
+impl ToolHost for App {
     type ToolPath = String;
     type ToolCx<'a>
         = AppToolContext<'a>
     where
         Self: 'a;
-
-    fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
-        &self.policy
-    }
 
     fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, InputError> {
         value
@@ -245,22 +286,102 @@ impl Kernel for App {
         let ctx = AppToolContext::new(self, registered_path, registration, params)
             .map_err(ToolError::Authorization)?;
 
-        registered.invoke(&ctx, payload).await
+        audit::record_tool_capabilities_override(
+            registered_path,
+            registration,
+            registration.spec().capabilities,
+            ctx.effective_capabilities(),
+        );
+
+        registered
+            .invoke(&ctx, payload)
+            .instrument(audit::execution_span())
+            .instrument(audit::tool_invocation_span(registered_path, registration))
+            .await
     }
+}
+
+pub fn register_default_tool<T>(
+    app: &mut App,
+    path: impl Into<String>,
+    tool: T,
+) -> Result<(), ToolError>
+where
+    T: ToolImpl<App>,
+{
+    app.register(path.into(), tool)
+}
+
+pub fn new_default_app() -> Result<App, ToolError> {
+    let mut app = App::new();
+    register_builtin_tools(&mut app)?;
+    register_monty_tools(&mut app)?;
+    allow_workspace_defaults(&mut app);
+    Ok(app)
+}
+
+pub fn register_builtin_tools(app: &mut App) -> Result<(), ToolError> {
+    app.register("read_file".to_owned(), ReadFileTool)?;
+    app.register("write_file".to_owned(), WriteFileTool)?;
+    app.register("double".to_owned(), Double)
+}
+
+pub fn register_monty_tools(app: &mut App) -> Result<(), ToolError> {
+    app.register(
+        "monty".to_owned(),
+        MontyTool::new().expose("read_file", "read_file"),
+    )?;
+    app.register("monty_os".to_owned(), MontyOsTool)
+}
+
+pub fn allow_workspace_defaults(app: &mut App) {
+    app.policy_mut().append(AllowWorkspaceFsPolicy);
+    app.policy_mut().append(AllowWorkspaceReadPolicy);
+    app.policy_mut()
+        .append::<MontySessionLoadAction, _>(AllowMontySessionPolicy);
+    app.policy_mut()
+        .append::<MontySessionSaveAction, _>(AllowMontySessionPolicy);
+}
+
+pub fn allow_fs_read_prefix(app: &mut App, prefix: impl Into<std::path::PathBuf>) {
+    app.policy_mut()
+        .append(AllowFileReadPrefixPolicy::new(prefix));
+}
+
+pub fn allow_fs_write_prefix(app: &mut App, prefix: impl Into<std::path::PathBuf>) {
+    app.policy_mut()
+        .append(AllowFileWritePrefixPolicy::new(prefix));
+}
+
+pub fn allow_network_domain(app: &mut App, domain: impl Into<String>) {
+    app.policy_mut().append(AllowDomainFetchPolicy::new(domain));
+}
+
+pub fn allow_action<A, P>(app: &mut App, policy: P)
+where
+    A: Action,
+    P: mvp_core::policy::Policy<KernelPolicyContextFactory, A> + 'static,
+{
+    app.policy_mut().append::<A, P>(policy);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use async_trait::async_trait;
+    use mvp_access_fs::{AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, FsBackend};
+    use mvp_contract::{
+        Capabilities, Capability, InvocationParams, OutputClassification, ToolOutcome, ToolSpec,
+    };
+    use mvp_core::{
+        error::{ExecutionError, InputError, ToolError},
+        tool::{ToolHost, ToolImpl},
+    };
+    use serde_json::{Value, json};
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use async_trait::async_trait;
-    use mvp_access_fs::{AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, FsBackend};
-    use mvp_contract::{Capabilities, Capability, OutputClassification, ToolSpec};
-    use mvp_kernel::error::{AuthorizationError, ExecutionError, InputError};
-    use serde_json::{Value, json};
+    use super::*;
 
     static NEXT_TEST_WORKSPACE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -294,9 +415,9 @@ mod tests {
     struct NoopTool;
 
     #[async_trait]
-    impl<K> ToolImpl<K> for NoopTool
+    impl<H> ToolImpl<H> for NoopTool
     where
-        K: Kernel,
+        H: ToolHost,
     {
         type Input = ();
         type Output = ToolOutcome;
@@ -315,7 +436,7 @@ mod tests {
 
         async fn execute(
             &self,
-            _ctx: &K::ToolCx<'_>,
+            _ctx: &H::ToolCx<'_>,
             _input: Self::Input,
         ) -> Result<Self::Output, ToolError> {
             Ok(ToolOutcome {
@@ -328,10 +449,10 @@ mod tests {
     struct ReadWorkspaceFileTool;
 
     #[async_trait]
-    impl<K> ToolImpl<K> for ReadWorkspaceFileTool
+    impl<H> ToolImpl<H> for ReadWorkspaceFileTool
     where
-        K: Kernel + FsBackend,
-        for<'a> K::ToolCx<'a>: HasFsAccess<K>,
+        H: ToolHost + FsBackend,
+        for<'a> H::ToolCx<'a>: HasFsAccess<H>,
     {
         type Input = String;
         type Output = ToolOutcome;
@@ -354,7 +475,7 @@ mod tests {
 
         async fn execute(
             &self,
-            ctx: &K::ToolCx<'_>,
+            ctx: &H::ToolCx<'_>,
             input: Self::Input,
         ) -> Result<Self::Output, ToolError> {
             let content = ctx
@@ -403,8 +524,8 @@ mod tests {
         let mut app = App::new();
         app.register("read_workspace_file".to_owned(), ReadWorkspaceFileTool)
             .unwrap();
-        app.policy.append(AllowWorkspaceFsPolicy);
-        app.policy.append(AllowWorkspaceReadPolicy);
+        app.policy_mut().append(AllowWorkspaceFsPolicy);
+        app.policy_mut().append(AllowWorkspaceReadPolicy);
 
         let outcome = app
             .invoke(
@@ -427,8 +548,8 @@ mod tests {
         let mut app = App::new();
         app.register("read_workspace_file".to_owned(), ReadWorkspaceFileTool)
             .unwrap();
-        app.policy.append(AllowWorkspaceFsPolicy);
-        app.policy.append(AllowWorkspaceReadPolicy);
+        app.policy_mut().append(AllowWorkspaceFsPolicy);
+        app.policy_mut().append(AllowWorkspaceReadPolicy);
 
         let err = app
             .invoke(
@@ -436,13 +557,15 @@ mod tests {
                 &InvocationParams::new(&ws.root, Some(Capabilities::empty())),
                 json!({ "path": "hello.txt" }),
             )
-            .await;
+            .await
+            .unwrap_err();
 
-        assert!(matches!(
-            err,
-            Err(ToolError::Execution(ExecutionError::Authorization(
-                AuthorizationError::Denied(reason)
-            ))) if reason == "action exceeds declared capability envelope"
-        ));
+        let ToolError::Execution(ExecutionError::Authorization(error)) = err else {
+            panic!("expected authorization error");
+        };
+        assert_eq!(
+            error.denied_reason(),
+            Some("action exceeds declared capability envelope")
+        );
     }
 }

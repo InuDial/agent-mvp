@@ -7,6 +7,7 @@ edition = "2024"
 async-trait.workspace = true
 serde_json.workspace = true
 mvp-contract.workspace = true
+mvp-core.workspace = true
 mvp-kernel.workspace = true
 mvp-access-fs.workspace = true
 mvp-access-monty.workspace = true

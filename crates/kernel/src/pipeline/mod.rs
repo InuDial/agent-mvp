@@ -2,13 +2,15 @@ use anymap::{Map as AnyMap, any::Any as AnyMapAny};
 use async_trait::async_trait;
 use std::{any::Any, collections::VecDeque, marker::PhantomData};
 
-use mvp_kernel::{
+use mvp_contract::{PolicyDecision, PolicyEvaluation, PolicyGrant, PolicyId, PolicyReport};
+use mvp_core::{
     action::Action,
-    policy::{
-        Policy, PolicyAny, PolicyContext, PolicyContextFactory, PolicyDecision, PolicyEngine,
-        PolicyEvaluation, PolicyGrant, PolicyId, PolicyReport,
-    },
+    error::AuthorizationError,
+    policy::{Granted, Policy, PolicyAny, PolicyContext, PolicyContextFactory, PolicyEngine},
 };
+use tracing::Instrument;
+
+use crate::audit;
 
 type SyncAnyMap = AnyMap<dyn AnyMapAny + Send + Sync>;
 
@@ -55,11 +57,6 @@ where
     }
 }
 
-/// Built-in coarse capability gate.
-///
-/// This policy only vetoes actions that exceed the current effective capability
-/// envelope. If the action is inside the envelope, it abstains and lets more
-/// specific policies decide whether to allow it.
 pub struct CapabilityEnvelopePolicy;
 
 #[async_trait]
@@ -90,7 +87,6 @@ where
     }
 }
 
-/// Minimal permissive fallback used by the current MVP tool pipeline.
 pub struct AllowAllPolicy;
 
 #[async_trait]
@@ -135,9 +131,19 @@ where
 {
     async fn decide<A: Action>(&self, ctx: &F::Context<'_>, action: &A) -> PolicyReport {
         let mut evaluations = Vec::new();
+        let action_kind = action.audit_kind();
+        let resource = action.audit_resource();
 
         for policy in &self.global_policies_inbound {
             let policy_grant = policy.inner.grant(ctx, action).await;
+            audit::record_policy_grant(
+                action_kind,
+                &resource,
+                policy.inner.name(),
+                policy.id,
+                "inbound",
+                &policy_grant,
+            );
             let (decision, reason) = policy_grant.clone().into_decision_and_reason();
             evaluations.push(PolicyEvaluation::new(
                 policy.inner.name(),
@@ -164,6 +170,14 @@ where
         {
             for policy in entries {
                 let policy_grant = policy.inner.grant(ctx, action).await;
+                audit::record_policy_grant(
+                    action_kind,
+                    &resource,
+                    policy.inner.name(),
+                    policy.id,
+                    "action",
+                    &policy_grant,
+                );
                 let (decision, reason) = policy_grant.clone().into_decision_and_reason();
                 evaluations.push(PolicyEvaluation::new(
                     policy.inner.name(),
@@ -195,6 +209,14 @@ where
 
         for policy in &self.global_policies_outbound {
             let policy_grant = policy.inner.grant(ctx, action).await;
+            audit::record_policy_grant(
+                action_kind,
+                &resource,
+                policy.inner.name(),
+                policy.id,
+                "outbound",
+                &policy_grant,
+            );
             let (decision, reason) = policy_grant.clone().into_decision_and_reason();
             evaluations.push(PolicyEvaluation::new(
                 policy.inner.name(),
@@ -224,6 +246,28 @@ where
         }
 
         PolicyReport::deny_without_match(evaluations, Some("No matching policy.".to_owned()))
+    }
+
+    async fn grant<A: Action>(
+        &self,
+        ctx: &F::Context<'_>,
+        action: A,
+    ) -> Result<Granted<A>, AuthorizationError> {
+        let span = audit::action_grant_span(action.audit_kind());
+        async {
+            let granted = mvp_core::policy::grant_with_engine(self, ctx, action).await;
+            match &granted {
+                Ok(granted) => audit::record_grant(granted.record()),
+                Err(error) => {
+                    if let Some(record) = error.deny_record() {
+                        audit::record_grant(record);
+                    }
+                }
+            }
+            granted
+        }
+        .instrument(span)
+        .await
     }
 }
 

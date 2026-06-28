@@ -1,23 +1,23 @@
 use std::path::{Path, PathBuf};
 
-use mvp_kernel::error::ExecutionError;
-use mvp_kernel::kernel::{Kernel, PolicyContextFor};
-use mvp_kernel::policy::PolicyEngine;
-use mvp_kernel::tool::ToolContext;
+use mvp_core::{
+    error::ExecutionError,
+    policy::{HasPolicyEngine, PolicyContextFor, PolicyEngine},
+};
 
 use crate::{MontySessionKey, MontySessionLoadAction, MontySessionSaveAction, MontySessionStore};
 
 /// Tool-context extension used by Monty tools to read and persist REPL state.
-pub trait HasMontySessionAccess<K>: ToolContext<K>
+pub trait HasMontySessionAccess<K>
 where
-    K: Kernel + MontySessionStore,
+    K: HasPolicyEngine + MontySessionStore,
 {
     fn monty_sessions(&self) -> MontySessionAccess<'_, K>;
 }
 
 pub struct MontySessionAccess<'a, K>
 where
-    K: Kernel + MontySessionStore + ?Sized,
+    K: HasPolicyEngine + MontySessionStore + ?Sized,
 {
     kernel: &'a K,
     policy_context: PolicyContextFor<'a, K>,
@@ -26,7 +26,7 @@ where
 
 impl<'a, K> MontySessionAccess<'a, K>
 where
-    K: Kernel + MontySessionStore,
+    K: HasPolicyEngine + MontySessionStore,
 {
     #[must_use]
     pub fn new(
@@ -52,7 +52,7 @@ where
             .map_err(ExecutionError::Authorization)?;
 
         let executor: &dyn MontySessionStore = self.kernel;
-        granted.execute_with(executor).await
+        self.kernel.execute_granted(granted, executor).await
     }
 
     pub async fn save(&self, session_id: &str, bytes: Vec<u8>) -> Result<(), ExecutionError> {
@@ -68,6 +68,6 @@ where
             .map_err(ExecutionError::Authorization)?;
 
         let executor: &dyn MontySessionStore = self.kernel;
-        granted.execute_with(executor).await
+        self.kernel.execute_granted(granted, executor).await
     }
 }

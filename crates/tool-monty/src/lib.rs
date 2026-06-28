@@ -10,10 +10,9 @@ use monty::{
 use mvp_access_fs::{FsBackend, HasFsAccess};
 use mvp_access_monty::{HasMontySessionAccess, MontySessionStore};
 use mvp_contract::{Capabilities, OutputClassification, ToolOutcome, ToolSpec};
-use mvp_kernel::{
+use mvp_core::{
     error::{ExecutionError, InputError, ToolError},
-    kernel::Kernel,
-    tool::{ToolContext, ToolImpl},
+    tool::{ToolContext, ToolHost, ToolImpl},
 };
 use serde_json::{Map, Number, Value, json};
 
@@ -101,7 +100,7 @@ impl MontyTool {
         code: &str,
     ) -> Result<MontyStepOutput, ToolError>
     where
-        K: Kernel,
+        K: ToolHost,
     {
         let mut classification = OutputClassification::Public;
         let mut progress = repl
@@ -243,7 +242,7 @@ impl MontyTool {
 #[async_trait]
 impl<K> ToolImpl<K> for MontyTool
 where
-    K: Kernel + MontySessionStore,
+    K: ToolHost + MontySessionStore,
     for<'a> K::ToolCx<'a>: HasMontySessionAccess<K>,
 {
     type Input = MontyInput;
@@ -311,7 +310,7 @@ where
 #[async_trait]
 impl<K> ToolImpl<K> for MontyOsTool
 where
-    K: Kernel + FsBackend,
+    K: ToolHost + FsBackend,
     for<'a> K::ToolCx<'a>: HasFsAccess<K>,
 {
     type Input = MontyOsInput;
@@ -585,13 +584,17 @@ mod tests {
         MontySessionSaveAction,
     };
     use mvp_contract::{Capability, InvocationParams};
-    use mvp_kernel::{
-        audit,
+    use mvp_core::{
         error::AuthorizationError,
-        policy::{KernelPolicyContext, KernelPolicyContextFactory},
+        policy::HasPolicyEngine,
         tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
     };
-    use mvp_test_support::{CapabilityEnvelopePolicy, TempWorkspace, TestPolicyPipeline};
+    use mvp_kernel::{
+        audit,
+        pipeline::CapabilityEnvelopePolicy,
+        policy_context::{KernelPolicyContext, KernelPolicyContextFactory},
+    };
+    use mvp_test_support::{TempWorkspace, TestPolicyPipeline};
     use std::collections::BTreeMap;
     use std::path::Path;
 
@@ -620,7 +623,7 @@ mod tests {
 
         fn register<T: ToolImpl<Self>>(
             &mut self,
-            path: <Self as Kernel>::ToolPath,
+            path: <Self as ToolHost>::ToolPath,
             tool: T,
         ) -> Result<(), ToolError> {
             if self.tools.contains_key(&path) {
@@ -651,7 +654,7 @@ mod tests {
 
     struct TestToolContext<'a> {
         kernel: &'a TestKernel,
-        tool_path: &'a <TestKernel as Kernel>::ToolPath,
+        tool_path: &'a <TestKernel as ToolHost>::ToolPath,
         registration: &'a ToolRegistration,
         effective_capabilities: Capabilities,
         canonical_workspace_root: CanonicalRoot,
@@ -660,7 +663,7 @@ mod tests {
     impl<'a> TestToolContext<'a> {
         fn new(
             kernel: &'a TestKernel,
-            tool_path: &'a <TestKernel as Kernel>::ToolPath,
+            tool_path: &'a <TestKernel as ToolHost>::ToolPath,
             registration: &'a ToolRegistration,
             params: &'a InvocationParams,
         ) -> Result<Self, AuthorizationError> {
@@ -694,7 +697,7 @@ mod tests {
             self.effective_capabilities
         }
 
-        fn tool_path(&self) -> &<TestKernel as Kernel>::ToolPath {
+        fn tool_path(&self) -> &<TestKernel as ToolHost>::ToolPath {
             self.tool_path
         }
 
@@ -708,7 +711,7 @@ mod tests {
 
         async fn invoke_tool(
             &self,
-            path: <TestKernel as Kernel>::ToolPath,
+            path: <TestKernel as ToolHost>::ToolPath,
             capabilities_override: Option<Capabilities>,
             payload: Value,
         ) -> Result<ToolOutcome, ToolError> {
@@ -761,23 +764,25 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl Kernel for TestKernel {
+    impl HasPolicyEngine for TestKernel {
         type PolicyCxFactory = KernelPolicyContextFactory;
         type PolicyEngine<'a>
             = TestPolicyPipeline<KernelPolicyContextFactory>
         where
             Self: 'a;
 
+        fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
+            &self.policy
+        }
+    }
+
+    #[async_trait]
+    impl ToolHost for TestKernel {
         type ToolPath = String;
         type ToolCx<'a>
             = TestToolContext<'a>
         where
             Self: 'a;
-
-        fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
-            &self.policy
-        }
 
         fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, InputError> {
             value
@@ -808,7 +813,7 @@ mod tests {
     #[async_trait]
     impl<K> ToolImpl<K> for EchoTool
     where
-        K: Kernel,
+        K: ToolHost,
     {
         type Input = Value;
         type Output = ToolOutcome;
@@ -849,7 +854,7 @@ mod tests {
         kernel.register("echo".to_owned(), EchoTool).unwrap();
 
         let params = InvocationParams::new(std::env::temp_dir(), Some([Capability::FsRead].into()));
-        let outcome = mvp_kernel::kernel::Kernel::invoke(
+        let outcome = mvp_core::tool::ToolHost::invoke(
             &kernel,
             &DEFAULT_TOOL_NAME.to_string(),
             &params,
@@ -873,7 +878,7 @@ mod tests {
             .unwrap();
 
         let params = InvocationParams::new(std::env::temp_dir(), None);
-        let first = mvp_kernel::kernel::Kernel::invoke(
+        let first = mvp_core::tool::ToolHost::invoke(
             &kernel,
             &DEFAULT_TOOL_NAME.to_string(),
             &params,
@@ -886,7 +891,7 @@ mod tests {
         .unwrap();
         assert_eq!(first.payload["session_id"], "agent-main");
 
-        let second = mvp_kernel::kernel::Kernel::invoke(
+        let second = mvp_core::tool::ToolHost::invoke(
             &kernel,
             &DEFAULT_TOOL_NAME.to_string(),
             &params,
@@ -917,7 +922,7 @@ mod tests {
         kernel.policy.append(AllowWorkspaceReadPolicy);
 
         let params = InvocationParams::new(&ws.root, Some([Capability::FsRead].into()));
-        let outcome = mvp_kernel::kernel::Kernel::invoke(
+        let outcome = mvp_core::tool::ToolHost::invoke(
             &kernel,
             &DEFAULT_TOOL_NAME.to_string(),
             &params,

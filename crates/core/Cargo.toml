@@ -1,0 +1,14 @@
+[package]
+name = "mvp-core"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["std", "tool"]
+std = []
+tool = ["dep:serde_json"]
+
+[dependencies]
+async-trait.workspace = true
+mvp-contract.workspace = true
+serde_json = { workspace = true, optional = true }

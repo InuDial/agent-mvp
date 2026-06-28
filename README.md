@@ -4,7 +4,7 @@ A Rust MVP for a layered tool-execution architecture with explicit capabilities,
 policy checks, access mediation, and audit records.
 
 The project is intentionally small. Its main artifact is the runtime architecture:
-tools do not perform side effects directly; they request kernel-owned access facades,
+tools do not perform side effects directly; they request controlled access facades,
 which turn requests into auditable actions and authorize them through policy.
 
 ## Start here
@@ -30,20 +30,21 @@ Read these first:
 
 If you want to jump straight into code, read in this order:
 
-1. `crates/kernel/src/action.rs`
-2. `crates/kernel/src/policy/decision.rs`
-3. `crates/kernel/src/policy/traits.rs`
-4. `crates/kernel/src/policy/grant.rs`
-5. `crates/app/src/policy_pipeline.rs`
+1. `crates/contract/src/lib.rs`
+2. `crates/core/src/action.rs`
+3. `crates/core/src/policy/traits.rs`
+4. `crates/core/src/policy/grant.rs`
+5. `crates/kernel/src/pipeline/mod.rs`
 6. `crates/access-fs/src/access.rs`
 7. `crates/access-fs/src/action.rs`
 8. `crates/access-fs/src/policy.rs`
 9. `crates/access-network/src/access.rs`
 10. `crates/access-monty/src/access.rs`
 11. `crates/kernel/src/audit.rs`
-12. `crates/app/src/lib.rs`
-13. `crates/tool-builtin/src`
-14. `crates/tool-monty/src/lib.rs`
+12. `crates/kernel/src/runtime/mod.rs`
+13. `crates/app/src/lib.rs`
+14. `crates/tool-builtin/src`
+15. `crates/tool-monty/src/lib.rs`
 
 ## Architecture goals
 
@@ -58,13 +59,14 @@ If you want to jump straight into code, read in this order:
 
 ```text
 crates/contract   Shared protocol, metadata, capabilities, invocation params
-crates/kernel     Kernel traits, tool context, actions, policy, grants, audit
+crates/core       Authorization traits, actions, policy engine, grants, tool host API
+crates/kernel     Service runtime, policy pipeline, audit, default backends
 crates/access-fs      Filesystem access facade, actions, backend, policies
 crates/access-network Network access facade, actions, backend, policies
 crates/access-monty   Monty session access, actions, store, policies
 crates/tool-builtin    Example Rust tools that exercise the architecture
 crates/tool-monty      Monty-backed tool runtime and Monty OS bridge
-crates/app        Concrete application kernel wiring tools, access, policy
+crates/app        Concrete tool host, registry, invocation, app policy helpers
 crates/test-support    Test helpers shared across crates
 examples/demo.rs       Small end-to-end executable example
 ```
@@ -97,7 +99,7 @@ The logical architecture is about runtime responsibility:
 - **Access facade** converts side-effect requests into semantic actions and
   executes only after policy returns a grant.
 - **Policy engine** decides whether an action is denied or returned as
-  `Granted<Action>` by the kernel-owned grant path.
+  `Granted<Action>` by the core-owned grant path.
 - **Executor** performs the authorized domain operation.
 - **Audit** records invocation events, grant decisions, and execution results.
 
@@ -108,7 +110,7 @@ example demo
   depends on app + tool-builtin + tool-monty
 
 app
-  concrete Kernel implementation and runtime wiring
+  concrete tool host, registry, invocation, and policy configuration
 
 tool-builtin / tool-monty
   ToolImpl implementations
@@ -117,18 +119,22 @@ access-fs / access-network / access-monty
   concrete access facades, actions, backends or stores, resource policies
 
 kernel
-  reusable traits, policy model, grants, audit, action flow
+  service runtime, policy pipeline, policy context, audit, default backends
+
+core
+  action traits, policy traits, policy context traits, tool host API, unforgeable grants
 
 contract
-  shared request/outcome/spec/capability types
+  shared request/outcome/spec/capability/policy report data
 ```
 
 The implementation layout is about code ownership and dependency direction.
-`contract` is the lowest shared layer. `kernel` defines reusable runtime
-mechanics without concrete access domains. Access crates plug side-effect
-domains into the shared action, policy, grant, and audit flow. `app` wires those
-mechanics and access facades into a concrete kernel. Tool crates supply tools that can
-run on that kernel-facing abstraction. `examples/demo.rs` composes the pieces.
+`contract` is the lowest shared data layer. `core` owns the authorization model,
+the generic tool host API, and the unforgeable `Granted<Action>` token. Access
+crates define side-effect domains over that model. `kernel` assembles services,
+policy pipeline, access backends, and audit. `app` owns the concrete tool
+registry, invocation context, nested invocation, and app-level policy
+configuration. `examples/demo.rs` composes the pieces.
 
 ### `contract`
 
@@ -138,22 +144,40 @@ run on that kernel-facing abstraction. `examples/demo.rs` composes the pieces.
 - `ToolSpec`
 - `Capability` / `Capabilities`
 - `InvocationParams`
+- `PolicyGrant`, `PolicyReport`, `GrantRecord`, and audit resource data
 
 This crate does not own execution. It only describes what can cross the runtime
 boundary.
 
+### `core`
+
+`mvp-core` defines the authorization and generic tool surface:
+
+- `Action` and `ActionExecutor`
+- `Policy`, `PolicyAny`, and `PolicyEngine`
+- `PolicyContext`, `PolicyContextFactory`, and `WorkspacePolicyContext`
+- `ToolHost`, `ToolContext`, `ToolImpl`, `ToolRegistration`, and `RegisteredTool`
+- `Granted<Action>`
+- authorization, execution, input, and tool errors
+
+`Granted<Action>` cannot be constructed outside `mvp-core`. A concrete policy
+engine returns a `PolicyReport`; the default `PolicyEngine::grant` implementation
+turns an allow report into `Granted<Action>`.
+
 ### `kernel`
 
-`mvp-kernel` defines the reusable execution model:
+`mvp-kernel` defines the service runtime model:
 
-- `Kernel` and `ToolContext` traits
-- tool registration and invocation adapters
-- `Action` and `Granted<Action>` authorization flow
-- `PolicyEngine` trait and kernel-owned `grant` flow
+- `PolicyPipeline`
+- `CapabilityEnvelopePolicy`
+- `KernelRuntime`
+- `KernelPolicyContext`
 - structured audit helpers
 
-The kernel crate contains the design primitives, but not the concrete application
-state or concrete side-effect access domains.
+The kernel crate does not re-export core or contract types. Public paths stay
+unique: authorization traits come from `mvp-core`, report/data types from
+`mvp-contract`, service runtime assembly from `mvp-kernel`, and concrete tool
+hosting from `mvp-app`.
 
 ### `access-*`
 
@@ -166,27 +190,23 @@ Access crates define concrete side-effect domains:
 - `mvp-access-monty` owns Monty session load/save actions, session access facade,
   session store traits, and session policies.
 
-Each access crate uses the kernel's shared `Action`, `PolicyEngine`,
-`Granted<Action>`, `ActionExecutor`, and audit flow. Actions carry policy and
-audit metadata; backend or store executors own domain execution.
+Each access crate uses `mvp-core` for `Action`, `PolicyEngine`,
+`Granted<Action>`, and `ActionExecutor`. Actions carry policy and audit metadata;
+backend or store executors own domain execution.
 
 ### `app`
 
-`mvp-app` is the concrete kernel implementation used by the example demo and
-tests.
+`mvp-app` is the concrete tool host over `mvp-kernel::runtime::KernelRuntime`.
 
-It wires together:
+It provides helpers for:
 
-- registered tools
-- `StdFsBackend`
-- `DenyNetworkBackend`
-- `MemoryMontySessionStore`
-- `PolicyPipeline`
-- `CapabilityEnvelopePolicy`
-- `AllowMontySessionPolicy`
-- per-call `AppToolContext`
+- registering and invoking tools
+- registering default tools
+- adding common policy defaults
+- configuring Monty and selected access policies
 
-This crate is where invocation parameters become an effective runtime context.
+`KernelRuntime` does not know that tools exist; `App` owns the tool registry,
+`AppToolContext`, nested invocation, and app-level ergonomics.
 
 ### `tool-builtin`
 
@@ -200,7 +220,7 @@ These tools are examples, not the architectural center of the repository.
 
 ### `tool-monty`
 
-`mvp-tool-monty` contains tools that run Monty code through the same kernel
+`mvp-tool-monty` contains tools that run Monty code through the same app host
 boundary:
 
 - `MontyTool` runs Monty snippets and can expose registered host tools as Monty
@@ -218,7 +238,7 @@ cargo run --example demo
 
 ## Invocation model
 
-A top-level call enters through `Kernel::invoke`:
+A top-level call enters through `App::invoke`:
 
 1. The application finds the registered tool.
 2. The application builds a `ToolContext`.
@@ -250,7 +270,7 @@ new authority.
 
 ## Policy model
 
-Actions are authorized by the `PolicyEngine` trait. The app's `PolicyPipeline`
+Actions are authorized by the `PolicyEngine` trait. The kernel's `PolicyPipeline`
 evaluates them in this order:
 
 1. inbound global policies
@@ -258,7 +278,7 @@ evaluates them in this order:
 3. outbound global policies
 4. default deny
 
-The app's `CapabilityEnvelopePolicy` is an inbound gate:
+The kernel's `CapabilityEnvelopePolicy` is an inbound gate:
 
 ```text
 action.capabilities() subset_of current_effective_capabilities
@@ -284,11 +304,13 @@ Each policy returns a `PolicyGrant` containing:
 
 This keeps policy-specific explanations with the policy while leaving emission,
 `Granted<Action>` construction, and final grant handling centralized in
-`PolicyEngine::grant` inside `mvp-kernel`.
+`PolicyEngine::grant` inside `mvp-core`. `mvp-kernel` records policy and
+execution audit through its pipeline/runtime; `mvp-app` records invocation and
+nested-call audit at the tool-host boundary.
 
 ## Access model
 
-Access facades are kernel-owned facades over side-effect domains.
+Access facades mediate side-effect domains.
 
 Current domains:
 
@@ -393,7 +415,7 @@ Known MVP boundaries:
 - Monty OS support currently covers selected calls only
 - `ToolOutcome.classification` exists in the contract but is not enforced as an
   output authorization boundary
-- only tools are included in this kernel
+- the concrete app host currently focuses on tools; other host surfaces are out of scope
 
 The design value is the separation between tool intent, semantic actions, policy
 decisions, effective authority, authorized domain execution, and audit.

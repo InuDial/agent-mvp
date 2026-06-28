@@ -1,15 +1,15 @@
 use std::path::Path;
 
-use mvp_kernel::error::ExecutionError;
-use mvp_kernel::kernel::{Kernel, PolicyContextFor};
-use mvp_kernel::policy::PolicyEngine;
-use mvp_kernel::tool::ToolContext;
+use mvp_core::{
+    error::ExecutionError,
+    policy::{HasPolicyEngine, PolicyContextFor, PolicyEngine},
+};
 
 use crate::{CanonicalRoot, FsAction, FsBackend, FsReadAction, FsWriteAction, action};
 
-pub trait HasFsAccess<K>: ToolContext<K>
+pub trait HasFsAccess<K>
 where
-    K: FsBackend + Kernel,
+    K: FsBackend + HasPolicyEngine,
 {
     fn fs(&self) -> FsAccess<'_, K>;
 }
@@ -18,10 +18,10 @@ where
 ///
 /// Public methods remain natural and function-like. Internally they follow the
 /// same pipeline: construct an action, ask policy to grant it, then execute the
-/// granted action. Grant / execute audit stays in the shared policy/action core.
+/// granted action. Concrete runtimes can wrap grant / execute with audit.
 pub struct FsAccess<'a, K>
 where
-    K: Kernel + FsBackend + ?Sized,
+    K: HasPolicyEngine + FsBackend + ?Sized,
 {
     kernel: &'a K,
     workspace_root: CanonicalRoot,
@@ -30,7 +30,7 @@ where
 
 impl<'a, K> FsAccess<'a, K>
 where
-    K: Kernel + FsBackend,
+    K: HasPolicyEngine + FsBackend,
 {
     pub fn new(
         kernel: &'a K,
@@ -67,7 +67,7 @@ where
             .map_err(ExecutionError::Authorization)?;
 
         let executor: &dyn FsBackend = self.kernel;
-        granted.execute_with(executor).await
+        self.kernel.execute_granted(granted, executor).await
     }
 
     pub async fn write_file(&self, path: &str, content: &str) -> Result<(), ExecutionError> {
@@ -91,6 +91,6 @@ where
             .map_err(ExecutionError::Authorization)?;
 
         let executor: &dyn FsBackend = self.kernel;
-        granted.execute_with(executor).await
+        self.kernel.execute_granted(granted, executor).await
     }
 }

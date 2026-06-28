@@ -2,13 +2,15 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use mvp_contract::{Capabilities, InvocationParams, OutputClassification, ToolOutcome, ToolSpec};
-use mvp_kernel::error::{AuthorizationError, InputError, ToolError};
-use mvp_kernel::kernel::Kernel;
-use mvp_kernel::policy::{
-    KernelPolicyContext, KernelPolicyContextFactory, PolicyEngine, PolicyReport,
+use mvp_contract::{
+    Capabilities, InvocationParams, OutputClassification, PolicyReport, ToolOutcome, ToolSpec,
 };
-use mvp_kernel::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
+use mvp_core::error::AuthorizationError;
+use mvp_core::error::{InputError, ToolError};
+use mvp_core::policy::{HasPolicyEngine, PolicyEngine};
+use mvp_core::tool::ToolHost;
+use mvp_core::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
+use mvp_kernel::policy_context::{KernelPolicyContext, KernelPolicyContextFactory};
 use serde_json::{Value, json};
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -49,7 +51,7 @@ struct AllowAllEngine;
 
 #[async_trait]
 impl PolicyEngine<KernelPolicyContextFactory> for AllowAllEngine {
-    async fn decide<A: mvp_kernel::action::Action>(
+    async fn decide<A: mvp_core::action::Action>(
         &self,
         _ctx: &KernelPolicyContext<'_>,
         _action: &A,
@@ -122,22 +124,25 @@ impl ToolContext<EnumPathKernel> for EnumPathToolContext<'_> {
     }
 }
 
-#[async_trait]
-impl Kernel for EnumPathKernel {
+impl HasPolicyEngine for EnumPathKernel {
     type PolicyCxFactory = KernelPolicyContextFactory;
     type PolicyEngine<'a>
         = AllowAllEngine
-    where
-        Self: 'a;
-    type ToolPath = TestToolPath;
-    type ToolCx<'a>
-        = EnumPathToolContext<'a>
     where
         Self: 'a;
 
     fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
         &self.policy
     }
+}
+
+#[async_trait]
+impl ToolHost for EnumPathKernel {
+    type ToolPath = TestToolPath;
+    type ToolCx<'a>
+        = EnumPathToolContext<'a>
+    where
+        Self: 'a;
 
     fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, InputError> {
         match value.as_str() {

@@ -9,7 +9,7 @@ The central rule is:
 tool code never performs side effects directly
 ```
 
-Instead, tools ask kernel-owned access facades to do work. Access facades translate requests
+Instead, tools ask controlled access facades to do work. Access facades translate requests
 into typed actions, the policy engine grants or denies those actions, and only a
 granted action can execute against the domain executor. Audit records describe
 the invocation, policy decision, and execution result.
@@ -18,7 +18,7 @@ the invocation, policy decision, and execution result.
 
 ```text
 Host
-  -> Kernel::invoke
+  -> App::invoke
   -> ToolContext
   -> ToolImpl
   -> Access facade
@@ -38,6 +38,11 @@ The important part is the direction of control:
 - `Granted<Action>` is the only value that can execute.
 - The executor performs the domain operation.
 
+The crate ownership is intentionally split: `mvp-core` owns the generic
+`ToolHost` / `ToolContext` / `ToolImpl` API, `mvp-kernel` owns service runtime,
+policy pipeline, backends, and audit helpers, and `mvp-app` owns the concrete tool
+registry, invocation context, and nested invocation behavior.
+
 ## Main Concepts
 
 ### Tool
@@ -47,8 +52,8 @@ Represent user or builtin behavior without giving it direct authority to perform
 side effects.
 
 Code:
-- `crates/kernel/src/tool/adapter.rs`
-- `crates/kernel/src/tool/context.rs`
+- `crates/core/src/tool`
+- `crates/app/src/lib.rs`
 - `crates/tool-builtin/src`
 
 ### Access
@@ -74,7 +79,7 @@ Actions declare their required capabilities, audit kind, and audit resource.
 Executors know how to run granted actions against their domain backend or store.
 
 Code:
-- `crates/kernel/src/action.rs`
+- `crates/core/src/action.rs`
 - `crates/access-fs/src/action.rs`
 - `crates/access-network/src/action.rs`
 - `crates/access-monty/src/action.rs`
@@ -84,9 +89,9 @@ Code:
 Purpose:
 Separate authorization rules from tool and access code.
 
-The kernel defines the `PolicyEngine` trait. Its default `grant` implementation
+The core crate defines the `PolicyEngine` trait. Its default `grant` implementation
 creates `Granted<Action>` values after the concrete engine returns a decision.
-The app's `PolicyPipeline` evaluates actions in this order:
+The kernel's `PolicyPipeline` evaluates actions in this order:
 
 1. inbound global policies
 2. typed action-specific policies
@@ -97,8 +102,8 @@ The capability envelope is an inbound policy. Resource policies are typed
 policies.
 
 Code:
-- `crates/kernel/src/policy/traits.rs`
-- `crates/app/src/policy_pipeline.rs`
+- `crates/core/src/policy/traits.rs`
+- `crates/kernel/src/pipeline/mod.rs`
 - `crates/access-fs/src/policy.rs`
 - `crates/access-network/src/policy.rs`
 - `crates/access-monty/src/policy.rs`
@@ -109,11 +114,11 @@ Purpose:
 Represent authorization as a value.
 
 Access facades cannot execute an action directly. They need `Granted<Action>`, which
-is created only by the kernel-owned grant path. `GrantId` links grant audit records to
+is created only by the core-owned grant path. `GrantId` links grant audit records to
 execution audit records.
 
 Code:
-- `crates/kernel/src/policy/grant.rs`
+- `crates/core/src/policy/grant.rs`
 
 ### Executor
 
@@ -122,12 +127,12 @@ Keep domain side effects on backend or store objects, while actions remain
 policy-facing intent values.
 
 `ActionExecutor<A>` runs only a `Granted<A>`. `Granted<A>` keeps the shared audit
-wrapper around execution, so access facades can delegate to domain executors without
-letting ungranted actions run.
+boundary around execution, so access facades can delegate to domain executors without
+letting ungranted actions run. Concrete runtimes can wrap this path with audit.
 
 Code:
-- `crates/kernel/src/action.rs`
-- `crates/kernel/src/policy/grant.rs`
+- `crates/core/src/action.rs`
+- `crates/core/src/policy/grant.rs`
 - `crates/access-fs/src/backend.rs`
 - `crates/access-network/src/backend.rs`
 - `crates/access-monty/src/store.rs`
@@ -197,29 +202,30 @@ Rules:
 - nested call without override inherits the parent envelope
 - nested override must stay within the parent envelope
 
-The app's `CapabilityEnvelopePolicy` denies actions whose required capabilities
+The kernel's `CapabilityEnvelopePolicy` denies actions whose required capabilities
 exceed the current effective envelope.
 
 Code:
 - `crates/contract/src/lib.rs`
-- `crates/app/src/policy_pipeline.rs`
+- `crates/kernel/src/pipeline/mod.rs`
 - `crates/app/src/lib.rs`
 
 ## Where To Start Reading
 
 Read in this order:
 
-1. `crates/kernel/src/action.rs`
-2. `crates/kernel/src/policy/decision.rs`
-3. `crates/kernel/src/policy/traits.rs`
-4. `crates/kernel/src/policy/grant.rs`
-5. `crates/app/src/policy_pipeline.rs`
+1. `crates/contract/src/lib.rs`
+2. `crates/core/src/action.rs`
+3. `crates/core/src/policy/traits.rs`
+4. `crates/core/src/policy/grant.rs`
+5. `crates/kernel/src/pipeline/mod.rs`
 6. `crates/access-fs/src/access.rs`
 7. `crates/access-fs/src/action.rs`
 8. `crates/access-fs/src/policy.rs`
 9. `crates/access-network/src/access.rs`
 10. `crates/access-monty/src/access.rs`
 11. `crates/kernel/src/audit.rs`
-12. `crates/app/src/lib.rs`
-13. `crates/tool-builtin/src`
-14. `crates/tool-monty/src/lib.rs`
+12. `crates/kernel/src/runtime/mod.rs`
+13. `crates/app/src/lib.rs`
+14. `crates/tool-builtin/src`
+15. `crates/tool-monty/src/lib.rs`

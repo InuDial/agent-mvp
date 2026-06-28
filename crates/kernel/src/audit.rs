@@ -7,15 +7,13 @@
 
 use std::fmt::Debug;
 
+use mvp_contract::{
+    AuditResource, Capabilities, GrantDecision, GrantId, GrantRecord, GrantSource, PolicyDecision,
+    PolicyGrant, PolicyId,
+};
+use mvp_core::{error::ExecutionError, tool::ToolRegistration};
 use tracing::{Span, debug, info, info_span, warn};
 
-use crate::action::AuditResource;
-use crate::error::ExecutionError;
-use crate::policy::{
-    GrantDecision, GrantRecord, GrantSource, PolicyDecision, PolicyGrant, PolicyId,
-};
-use crate::tool::{GrantId, ToolRegistration};
-use mvp_contract::Capabilities;
 use tracing::field::Empty;
 
 pub const AUDIT_TARGET: &str = "mvp::audit";
@@ -66,7 +64,7 @@ pub fn tool_invocation_span<P: Debug>(tool_path: &P, registration: &ToolRegistra
     )
 }
 
-pub(crate) fn record_tool_capabilities_override<P: Debug>(
+pub fn record_tool_capabilities_override<P: Debug>(
     tool_path: &P,
     registration: &ToolRegistration,
     declared_capabilities: Capabilities,

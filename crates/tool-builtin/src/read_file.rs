@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use mvp_access_fs::{FsBackend, HasFsAccess};
 use mvp_contract::{Capability, OutputClassification, ToolOutcome, ToolSpec};
-use mvp_kernel::error::{InputError, ToolError};
-use mvp_kernel::kernel::Kernel;
-use mvp_kernel::tool::ToolImpl;
+use mvp_core::error::{InputError, ToolError};
+use mvp_core::tool::ToolHost;
+use mvp_core::tool::ToolImpl;
 use serde_json::{Value, json};
 
 pub struct ReadFileTool;
@@ -28,7 +28,7 @@ impl From<ReadFileOutput> for ToolOutcome {
 #[async_trait]
 impl<K> ToolImpl<K> for ReadFileTool
 where
-    K: Kernel + FsBackend,
+    K: ToolHost + FsBackend,
     for<'a> K::ToolCx<'a>: HasFsAccess<K>,
 {
     type Input = ReadFileInput;
@@ -86,7 +86,7 @@ mod tests {
         kernel.policy.append(AllowWorkspaceReadPolicy);
 
         let params = InvocationParams::new(&ws.root, None);
-        let outcome = mvp_kernel::kernel::Kernel::invoke(
+        let outcome = mvp_core::tool::ToolHost::invoke(
             &kernel,
             &"read_file".to_string(),
             &params,

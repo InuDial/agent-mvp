@@ -5,19 +5,19 @@ use std::{
 };
 
 use async_trait::async_trait;
-use mvp_kernel::action::ActionExecutor;
-use mvp_kernel::error::ExecutionError;
-use mvp_kernel::policy::Granted;
+use mvp_core::action::ActionExecutor;
+use mvp_core::error::ExecutionError;
+use mvp_core::policy::Granted;
 
 use crate::{MontySessionLoadAction, MontySessionSaveAction};
 
-/// Kernel-side storage for serialized Monty REPL sessions.
+/// ToolHost-side storage for serialized Monty REPL sessions.
 pub trait MontySessionStore: Send + Sync {
     fn load(&self, key: &MontySessionKey) -> Result<Option<Vec<u8>>, ExecutionError>;
     fn save(&self, key: MontySessionKey, bytes: Vec<u8>) -> Result<(), ExecutionError>;
 }
 
-/// Kernel extension for implementations that own Monty session storage.
+/// ToolHost extension for implementations that own Monty session storage.
 pub trait HasMontySessionStore: Send + Sync {
     type MontySessionStore: MontySessionStore + ?Sized;
 
@@ -119,13 +119,13 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use mvp_contract::{Capabilities, InvocationParams, ToolOutcome};
-    use mvp_kernel::error::{InputError, ToolError};
-    use mvp_kernel::kernel::Kernel;
-    use mvp_kernel::policy::{
-        KernelPolicyContext, KernelPolicyContextFactory, PolicyContextFactory,
-    };
-    use mvp_kernel::tool::{ToolContext, ToolRegistration};
-    use mvp_test_support::{CapabilityEnvelopePolicy, TestPolicyPipeline};
+    use mvp_core::error::{InputError, ToolError};
+    use mvp_core::policy::{HasPolicyEngine, PolicyContextFactory};
+    use mvp_core::tool::ToolHost;
+    use mvp_core::tool::{ToolContext, ToolRegistration};
+    use mvp_kernel::pipeline::CapabilityEnvelopePolicy;
+    use mvp_kernel::policy_context::{KernelPolicyContext, KernelPolicyContextFactory};
+    use mvp_test_support::TestPolicyPipeline;
     use serde_json::Value;
     use std::path::{Path, PathBuf};
 
@@ -154,7 +154,7 @@ mod tests {
             Capabilities::empty()
         }
 
-        fn tool_path(&self) -> &<TestKernel as Kernel>::ToolPath {
+        fn tool_path(&self) -> &<TestKernel as ToolHost>::ToolPath {
             panic!("unused in Monty session store tests")
         }
 
@@ -168,7 +168,7 @@ mod tests {
 
         async fn invoke_tool(
             &self,
-            _path: <TestKernel as Kernel>::ToolPath,
+            _path: <TestKernel as ToolHost>::ToolPath,
             _capabilities_override: Option<Capabilities>,
             _payload: Value,
         ) -> Result<ToolOutcome, ToolError> {
@@ -197,23 +197,25 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl Kernel for TestKernel {
+    impl HasPolicyEngine for TestKernel {
         type PolicyCxFactory = KernelPolicyContextFactory;
         type PolicyEngine<'a>
             = TestPolicyPipeline<KernelPolicyContextFactory>
         where
             Self: 'a;
 
+        fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
+            &self.policy
+        }
+    }
+
+    #[async_trait]
+    impl ToolHost for TestKernel {
         type ToolPath = String;
         type ToolCx<'a>
             = UnusedToolContext
         where
             Self: 'a;
-
-        fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
-            &self.policy
-        }
 
         fn decode_tool_path(_value: &Value) -> Result<Self::ToolPath, InputError> {
             panic!("unused in Monty session store tests")

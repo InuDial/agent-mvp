@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anymap = "0.12.1"
 async-trait.workspace = true
 mvp-contract.workspace = true
+mvp-core.workspace = true
 mvp-kernel.workspace = true
 mvp-access-fs.workspace = true
 mvp-access-monty.workspace = true
 mvp-access-network.workspace = true
+mvp-tool-builtin.workspace = true
 mvp-tool-monty.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

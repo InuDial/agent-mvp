@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 
-use mvp_kernel::action::ActionExecutor;
-use mvp_kernel::error::{CapabilityError, ExecutionError};
-use mvp_kernel::policy::Granted;
+use mvp_core::action::ActionExecutor;
+use mvp_core::error::{CapabilityError, ExecutionError};
+use mvp_core::policy::Granted;
 
 use super::action::{CanonicalPath, FsReadAction, FsWriteAction};
 

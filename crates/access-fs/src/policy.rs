@@ -8,7 +8,8 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use mvp_kernel::policy::{Policy, PolicyContextFactory, PolicyGrant, WorkspacePolicyContext};
+use mvp_contract::PolicyGrant;
+use mvp_core::policy::{Policy, PolicyContextFactory, WorkspacePolicyContext};
 
 use super::action::{CanonicalPath, CanonicalPrefix, FsAction, FsReadAction, FsWriteAction};
 

@@ -4,7 +4,7 @@ use mvp_access_fs::{AllowExactFileWritePolicy, AllowWorkspaceFsPolicy, AllowWork
 use mvp_access_monty::{AllowMontySessionPolicy, MontySessionLoadAction, MontySessionSaveAction};
 use mvp_app::App;
 use mvp_contract::{Capability, InvocationParams};
-use mvp_kernel::{audit::AUDIT_TARGET, kernel::Kernel};
+use mvp_kernel::audit::AUDIT_TARGET;
 use mvp_tool_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
 use mvp_tool_monty::{MontyOsTool, MontyTool};
 use opentelemetry::trace::TracerProvider;
@@ -79,14 +79,14 @@ async fn run_demo(log_format: LogFormat) {
     .unwrap();
     app.register("monty_os".to_owned(), MontyOsTool).unwrap();
 
-    app.policy.append(AllowWorkspaceFsPolicy);
-    app.policy
+    app.policy_mut().append(AllowWorkspaceFsPolicy);
+    app.policy_mut()
         .append(AllowExactFileWritePolicy::new(root.join("hello.txt")));
-    app.policy.append(AllowWorkspaceReadPolicy);
+    app.policy_mut().append(AllowWorkspaceReadPolicy);
 
-    app.policy
+    app.policy_mut()
         .append::<MontySessionLoadAction, _>(AllowMontySessionPolicy);
-    app.policy
+    app.policy_mut()
         .append::<MontySessionSaveAction, _>(AllowMontySessionPolicy);
 
     let write_params = InvocationParams::new(&root, Some([Capability::FsWrite].into()));

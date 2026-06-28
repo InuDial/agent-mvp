@@ -974,6 +974,7 @@ dependencies = [
  "mvp-access-monty",
  "mvp-app",
  "mvp-contract",
+ "mvp-core",
  "mvp-kernel",
  "mvp-tool-builtin",
  "mvp-tool-monty",
@@ -993,6 +994,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "mvp-contract",
+ "mvp-core",
  "mvp-kernel",
  "mvp-test-support",
  "serde_json",
@@ -1005,6 +1007,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "mvp-contract",
+ "mvp-core",
  "mvp-kernel",
  "mvp-test-support",
  "serde_json",
@@ -1017,6 +1020,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "mvp-contract",
+ "mvp-core",
  "mvp-kernel",
  "mvp-test-support",
  "serde_json",
@@ -1027,13 +1031,14 @@ dependencies = [
 name = "mvp-app"
 version = "0.1.0"
 dependencies = [
- "anymap",
  "async-trait",
  "mvp-access-fs",
  "mvp-access-monty",
  "mvp-access-network",
  "mvp-contract",
+ "mvp-core",
  "mvp-kernel",
+ "mvp-tool-builtin",
  "mvp-tool-monty",
  "serde_json",
  "tokio",
@@ -1051,11 +1056,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "mvp-kernel"
+name = "mvp-core"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "mvp-contract",
+ "serde_json",
+]
+
+[[package]]
+name = "mvp-kernel"
+version = "0.1.0"
+dependencies = [
+ "anymap",
+ "async-trait",
+ "mvp-access-fs",
+ "mvp-access-monty",
+ "mvp-access-network",
+ "mvp-contract",
+ "mvp-core",
  "serde_json",
  "tokio",
  "tracing",
@@ -1065,11 +1084,11 @@ dependencies = [
 name = "mvp-test-support"
 version = "0.1.0"
 dependencies = [
- "anymap",
  "async-trait",
  "mvp-access-fs",
  "mvp-access-network",
  "mvp-contract",
+ "mvp-core",
  "mvp-kernel",
  "serde_json",
 ]
@@ -1082,7 +1101,7 @@ dependencies = [
  "mvp-access-fs",
  "mvp-access-network",
  "mvp-contract",
- "mvp-kernel",
+ "mvp-core",
  "mvp-test-support",
  "serde_json",
  "tokio",
@@ -1098,6 +1117,7 @@ dependencies = [
  "mvp-access-monty",
  "mvp-access-network",
  "mvp-contract",
+ "mvp-core",
  "mvp-kernel",
  "mvp-test-support",
  "mvp-tool-builtin",

@@ -1,5 +1,5 @@
-use mvp_contract::Capabilities;
-use mvp_kernel::action::{Action, AuditResource};
+use mvp_contract::{AuditResource, Capabilities};
+use mvp_core::action::Action;
 
 use crate::MontySessionKey;
 
