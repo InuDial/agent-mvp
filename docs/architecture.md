@@ -152,7 +152,7 @@ Audit events use stable dot-separated names such as `grant.allow`,
 consumers do not need to parse `Some(...)` / `None` debug strings or filter
 empty sentinel values.
 
-`examples/demo.rs` can emit newline-delimited JSON with span metadata by setting
+`examples/demo/` can emit newline-delimited JSON with span metadata by setting
 `MVP_LOG_FORMAT=json`; the default subscriber remains the existing human-readable
 formatter.
 

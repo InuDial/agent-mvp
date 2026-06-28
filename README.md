@@ -68,7 +68,7 @@ crates/tool-builtin    Example Rust tools that exercise the architecture
 crates/tool-monty      Monty-backed tool runtime and Monty OS bridge
 crates/app        Concrete tool host, registry, invocation context
 crates/test-support    Test helpers shared across crates
-examples/demo.rs       Small end-to-end executable example
+examples/demo/         Small end-to-end executable example
 ```
 
 ## Logical layers
@@ -134,7 +134,7 @@ the generic tool host API, and the unforgeable `Granted<Action>` token. Access
 crates define side-effect domains over that model. `kernel` assembles services,
 policy pipeline, access backends, and audit. `app` owns the concrete tool
 registry, invocation context, nested invocation, and app-level policy
-configuration. `examples/demo.rs` composes the pieces.
+configuration. `examples/demo/` composes the pieces.
 
 ### `contract`
 
