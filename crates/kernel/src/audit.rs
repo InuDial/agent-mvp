@@ -12,18 +12,18 @@ use mvp_contract::{
     PolicyGrant, PolicyId,
 };
 use mvp_core::{error::ExecutionError, tool::ToolRegistration};
-use tracing::{Span, debug, info, info_span, warn};
+use tracing::{debug, info, warn};
 
-use tracing::field::Empty;
+use tracing::{Span, field::Empty};
 
 pub const AUDIT_TARGET: &str = "mvp::audit";
 
 // Span names describe the nested operation timeline rendered by trace viewers.
-const SPAN_TOOL_INVOKE: &str = "tool.invoke";
-const SPAN_TOOL_PARSE_INPUT: &str = "tool.parse_input";
-const SPAN_TOOL_EXECUTION: &str = "tool.execution";
-const SPAN_ACTION_GRANT: &str = "action.grant";
-const SPAN_ACTION_EXECUTE: &str = "action.execute";
+pub const SPAN_TOOL_INVOKE: &str = "tool.invoke";
+pub const SPAN_TOOL_PARSE_INPUT: &str = "tool.parse_input";
+pub const SPAN_TOOL_EXECUTION: &str = "tool.execution";
+pub const SPAN_ACTION_GRANT: &str = "action.grant";
+pub const SPAN_ACTION_EXECUTE: &str = "action.execute";
 
 // Event names describe individual audit facts that log backends query.
 const EVENT_TOOL_CAPABILITIES_OVERRIDE: &str = "tool.capabilities_override";
@@ -36,10 +36,10 @@ const EVENT_EXECUTE_FINISH: &str = "execute.finish";
 const EVENT_EXECUTE_ERROR: &str = "execute.error";
 
 // Phases are coarse buckets shared across events and spans.
-const PHASE_TOOL: &str = "tool";
-const PHASE_POLICY: &str = "policy";
-const PHASE_GRANT: &str = "grant";
-const PHASE_EXECUTE: &str = "execute";
+pub const PHASE_TOOL: &str = "tool";
+pub const PHASE_POLICY: &str = "policy";
+pub const PHASE_GRANT: &str = "grant";
+pub const PHASE_EXECUTE: &str = "execute";
 
 // Grant sources identify why authorization reached a final allow/deny record.
 const GRANT_SOURCE_POLICY: &str = "policy";
@@ -55,13 +55,20 @@ const RESOURCE_KIND_PATH: &str = "path";
 const RESOURCE_KIND_VALUE: &str = "value";
 const RESOURCE_KIND_NONE: &str = "none";
 
-pub fn tool_invocation_span<P: Debug>(tool_path: &P, registration: &ToolRegistration) -> Span {
-    info_span!(
-        target: AUDIT_TARGET,
-        SPAN_TOOL_INVOKE,
-        tool_path = ?tool_path,
-        tool_name = %registration.spec().name,
-    )
+#[macro_export]
+macro_rules! tool_invocation_span {
+    ($tool_path:expr, $registration:expr) => {
+        tracing::info_span!(
+            target: $crate::audit::AUDIT_TARGET,
+            $crate::audit::SPAN_TOOL_INVOKE,
+            otel.name = %format!("tool.invoke {}", $registration.spec().name),
+            phase = $crate::audit::PHASE_TOOL,
+            tool_path = ?$tool_path,
+            tool_name = %$registration.spec().name,
+            result = tracing::field::Empty,
+            error = tracing::field::Empty,
+        )
+    };
 }
 
 pub fn record_tool_capabilities_override<P: Debug>(
@@ -128,40 +135,70 @@ pub fn record_nested_capability_override<P: Debug, C: Debug>(
     }
 }
 
-pub fn parse_input_span() -> Span {
-    info_span!(
-        target: AUDIT_TARGET,
-        SPAN_TOOL_PARSE_INPUT,
-    )
+#[macro_export]
+macro_rules! tool_parse_input_span {
+    ($tool_name:expr) => {
+        tracing::info_span!(
+            target: $crate::audit::AUDIT_TARGET,
+            $crate::audit::SPAN_TOOL_PARSE_INPUT,
+            otel.name = %format!("tool.parse_input {}", $tool_name),
+            phase = $crate::audit::PHASE_TOOL,
+            tool_name = %$tool_name,
+            result = tracing::field::Empty,
+            error = tracing::field::Empty,
+        )
+    };
 }
 
-pub fn execution_span() -> Span {
-    info_span!(
-        target: AUDIT_TARGET,
-        SPAN_TOOL_EXECUTION,
-    )
+#[macro_export]
+macro_rules! tool_execution_span {
+    ($tool_name:expr) => {
+        tracing::info_span!(
+            target: $crate::audit::AUDIT_TARGET,
+            $crate::audit::SPAN_TOOL_EXECUTION,
+            otel.name = %format!("tool.execute {}", $tool_name),
+            phase = $crate::audit::PHASE_TOOL,
+            tool_name = %$tool_name,
+            result = tracing::field::Empty,
+            error = tracing::field::Empty,
+        )
+    };
 }
 
-pub fn action_grant_span(action_kind: &str) -> Span {
-    info_span!(
-        target: AUDIT_TARGET,
-        SPAN_ACTION_GRANT,
-        phase = PHASE_GRANT,
-        action = action_kind,
-    )
+#[macro_export]
+macro_rules! action_grant_span {
+    ($action_kind:expr) => {
+        tracing::info_span!(
+            target: $crate::audit::AUDIT_TARGET,
+            $crate::audit::SPAN_ACTION_GRANT,
+            otel.name = %format!("action.grant {}", $action_kind),
+            phase = $crate::audit::PHASE_GRANT,
+            action = $action_kind,
+            result = tracing::field::Empty,
+            grant_id = tracing::field::Empty,
+            policy_name = tracing::field::Empty,
+            reason = tracing::field::Empty,
+        )
+    };
 }
 
-pub fn action_execute_span(action_kind: &str, grant_id: GrantId, resource: &AuditResource) -> Span {
-    let (resource_kind, resource_value) = serialize_resource(resource);
-    info_span!(
-        target: AUDIT_TARGET,
-        SPAN_ACTION_EXECUTE,
-        phase = PHASE_EXECUTE,
-        action = action_kind,
-        grant_id = grant_id.get(),
-        resource_kind = resource_kind,
-        resource = %resource_value,
-    )
+#[macro_export]
+macro_rules! action_execute_span {
+    ($action_kind:expr, $grant_id:expr, $resource:expr) => {{
+        let (resource_kind, resource_value) = $crate::audit::serialize_resource($resource);
+        tracing::info_span!(
+            target: $crate::audit::AUDIT_TARGET,
+            $crate::audit::SPAN_ACTION_EXECUTE,
+            otel.name = %format!("action.execute {}", $action_kind),
+            phase = $crate::audit::PHASE_EXECUTE,
+            action = $action_kind,
+            grant_id = $grant_id.get(),
+            resource_kind = resource_kind,
+            resource = %resource_value,
+            result = tracing::field::Empty,
+            error = tracing::field::Empty,
+        )
+    }};
 }
 
 pub(crate) fn record_grant(record: &GrantRecord) {
@@ -195,6 +232,26 @@ pub(crate) fn record_grant(record: &GrantRecord) {
         policy_id = policy_id,
         reason = record.reason(),
     );
+
+    let span = Span::current();
+    match record.decision() {
+        GrantDecision::Allow(grant_id) => {
+            span.record("result", "allow");
+            span.record("otel.status_code", "ok");
+            span.record("grant_id", grant_id.get());
+        }
+        GrantDecision::Deny => {
+            span.record("result", "deny");
+            span.record("otel.status_code", "error");
+            if let Some(reason) = record.reason() {
+                span.record("otel.status_description", reason);
+                span.record("reason", reason);
+            }
+        }
+    }
+    if let Some(policy_name) = policy_name {
+        span.record("policy_name", policy_name);
+    }
 }
 
 pub(crate) fn record_policy_grant(
@@ -234,6 +291,9 @@ pub(crate) fn execute_start(action_kind: &str, grant_id: GrantId, resource: &Aud
 
 pub(crate) fn execute_finish(action_kind: &str, grant_id: GrantId, resource: &AuditResource) {
     log_action_event(EVENT_EXECUTE_FINISH, action_kind, Some(grant_id), resource);
+    let span = Span::current();
+    span.record("result", "ok");
+    span.record("otel.status_code", "ok");
 }
 
 pub(crate) fn execute_error(
@@ -256,6 +316,12 @@ pub(crate) fn execute_error(
         reason = Empty,
         error = error,
     );
+
+    let span = Span::current();
+    span.record("result", "error");
+    span.record("otel.status_code", "error");
+    span.record("otel.status_description", error.as_str());
+    span.record("error", error.as_str());
 }
 
 fn log_action_event(
@@ -279,7 +345,8 @@ fn log_action_event(
     );
 }
 
-fn serialize_resource(resource: &AuditResource) -> (&'static str, String) {
+#[doc(hidden)]
+pub fn serialize_resource(resource: &AuditResource) -> (&'static str, String) {
     match resource {
         AuditResource::Path(path) => (RESOURCE_KIND_PATH, path.display().to_string()),
         AuditResource::Value(value) => (RESOURCE_KIND_VALUE, value.clone()),

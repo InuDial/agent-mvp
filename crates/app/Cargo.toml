@@ -11,8 +11,6 @@ mvp-kernel.workspace = true
 mvp-access-fs.workspace = true
 mvp-access-monty.workspace = true
 mvp-access-network.workspace = true
-mvp-tool-builtin.workspace = true
-mvp-tool-monty.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 

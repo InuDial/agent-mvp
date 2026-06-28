@@ -12,3 +12,4 @@ tool = ["dep:serde_json"]
 async-trait.workspace = true
 mvp-contract.workspace = true
 serde_json = { workspace = true, optional = true }
+tracing.workspace = true

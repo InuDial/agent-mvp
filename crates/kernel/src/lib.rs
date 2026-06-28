@@ -1,8 +1,8 @@
-//! Reusable runtime primitives for the tool-execution architecture.
+//! Reusable service runtime primitives for the tool-execution architecture.
 //!
-//! The kernel crate owns runtime assembly: tools, contexts, policy pipeline,
-//! grants audit, and invocation helpers. Core authorization traits live in
-//! `mvp-core`; protocol data lives in `mvp-contract`.
+//! The kernel crate owns service assembly, policy pipeline, grant/execution
+//! audit, and default backend wiring. Core authorization and generic tool traits
+//! live in `mvp-core`; protocol data lives in `mvp-contract`.
 
 pub mod audit;
 pub mod pipeline;

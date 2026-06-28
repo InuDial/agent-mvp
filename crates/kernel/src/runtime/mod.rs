@@ -91,7 +91,7 @@ impl HasPolicyEngine for KernelRuntime {
         let action_kind = granted.action().audit_kind();
         let resource = granted.action().audit_resource();
         let grant_id = granted.grant_id();
-        let span = audit::action_execute_span(action_kind, grant_id, &resource);
+        let span = crate::action_execute_span!(action_kind, grant_id, &resource);
 
         async move {
             audit::execute_start(action_kind, grant_id, &resource);

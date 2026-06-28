@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use async_trait::async_trait;
 use mvp_contract::{InvocationParams, ToolOutcome};
 use serde_json::Value;
+use tracing::Span;
 
 use crate::{
     error::{InputError, ToolError},
@@ -17,6 +18,16 @@ pub trait ToolHost: HasPolicyEngine + Sized {
     type ToolCx<'a>: ToolContext<Self>
     where
         Self: 'a;
+
+    fn parse_input_span(tool_name: &str) -> Span {
+        let _ = tool_name;
+        Span::none()
+    }
+
+    fn execution_span(tool_name: &str) -> Span {
+        let _ = tool_name;
+        Span::none()
+    }
 
     fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, InputError>;
 

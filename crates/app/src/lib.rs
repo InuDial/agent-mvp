@@ -1,17 +1,9 @@
 use std::{collections::BTreeMap, path::Path};
 
 use async_trait::async_trait;
-use mvp_access_fs::{
-    AllowFileReadPrefixPolicy, AllowFileWritePrefixPolicy, AllowWorkspaceFsPolicy,
-    AllowWorkspaceReadPolicy, CanonicalRoot, FsAccess, HasFsAccess, HasFsBackend,
-};
-use mvp_access_monty::{
-    AllowMontySessionPolicy, HasMontySessionAccess, HasMontySessionStore, MontySessionAccess,
-    MontySessionLoadAction, MontySessionSaveAction,
-};
-use mvp_access_network::{
-    AllowDomainFetchPolicy, HasNetworkAccess, HasNetworkBackend, NetworkAccess,
-};
+use mvp_access_fs::{CanonicalRoot, FsAccess, HasFsAccess, HasFsBackend};
+use mvp_access_monty::{HasMontySessionAccess, HasMontySessionStore, MontySessionAccess};
+use mvp_access_network::{HasNetworkAccess, HasNetworkBackend, NetworkAccess};
 use mvp_contract::{Capabilities, InvocationParams, ToolOutcome};
 use mvp_core::{
     action::{Action, ActionExecutor},
@@ -25,10 +17,8 @@ use mvp_kernel::{
     policy_context::{KernelPolicyContext, KernelPolicyContextFactory},
     runtime::KernelRuntime,
 };
-use mvp_tool_builtin::{double::Double, read_file::ReadFileTool, write_file::WriteFileTool};
-use mvp_tool_monty::{MontyOsTool, MontyTool};
 use serde_json::Value;
-use tracing::Instrument;
+use tracing::{Instrument, Span};
 
 pub struct App {
     kernel: KernelRuntime,
@@ -265,6 +255,14 @@ impl ToolHost for App {
     where
         Self: 'a;
 
+    fn parse_input_span(tool_name: &str) -> Span {
+        mvp_kernel::tool_parse_input_span!(tool_name)
+    }
+
+    fn execution_span(tool_name: &str) -> Span {
+        mvp_kernel::tool_execution_span!(tool_name)
+    }
+
     fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, InputError> {
         value
             .as_str()
@@ -293,76 +291,30 @@ impl ToolHost for App {
             ctx.effective_capabilities(),
         );
 
-        registered
-            .invoke(&ctx, payload)
-            .instrument(audit::execution_span())
-            .instrument(audit::tool_invocation_span(registered_path, registration))
-            .await
+        async {
+            let result = registered.invoke(&ctx, payload).await;
+            let span = Span::current();
+            match &result {
+                Ok(_) => {
+                    span.record("result", "ok");
+                    span.record("otel.status_code", "ok");
+                }
+                Err(error) => {
+                    let error = format!("{error:?}");
+                    span.record("result", "error");
+                    span.record("otel.status_code", "error");
+                    span.record("otel.status_description", error.as_str());
+                    span.record("error", error.as_str());
+                }
+            }
+            result
+        }
+        .instrument(mvp_kernel::tool_invocation_span!(
+            registered_path,
+            registration
+        ))
+        .await
     }
-}
-
-pub fn register_default_tool<T>(
-    app: &mut App,
-    path: impl Into<String>,
-    tool: T,
-) -> Result<(), ToolError>
-where
-    T: ToolImpl<App>,
-{
-    app.register(path.into(), tool)
-}
-
-pub fn new_default_app() -> Result<App, ToolError> {
-    let mut app = App::new();
-    register_builtin_tools(&mut app)?;
-    register_monty_tools(&mut app)?;
-    allow_workspace_defaults(&mut app);
-    Ok(app)
-}
-
-pub fn register_builtin_tools(app: &mut App) -> Result<(), ToolError> {
-    app.register("read_file".to_owned(), ReadFileTool)?;
-    app.register("write_file".to_owned(), WriteFileTool)?;
-    app.register("double".to_owned(), Double)
-}
-
-pub fn register_monty_tools(app: &mut App) -> Result<(), ToolError> {
-    app.register(
-        "monty".to_owned(),
-        MontyTool::new().expose("read_file", "read_file"),
-    )?;
-    app.register("monty_os".to_owned(), MontyOsTool)
-}
-
-pub fn allow_workspace_defaults(app: &mut App) {
-    app.policy_mut().append(AllowWorkspaceFsPolicy);
-    app.policy_mut().append(AllowWorkspaceReadPolicy);
-    app.policy_mut()
-        .append::<MontySessionLoadAction, _>(AllowMontySessionPolicy);
-    app.policy_mut()
-        .append::<MontySessionSaveAction, _>(AllowMontySessionPolicy);
-}
-
-pub fn allow_fs_read_prefix(app: &mut App, prefix: impl Into<std::path::PathBuf>) {
-    app.policy_mut()
-        .append(AllowFileReadPrefixPolicy::new(prefix));
-}
-
-pub fn allow_fs_write_prefix(app: &mut App, prefix: impl Into<std::path::PathBuf>) {
-    app.policy_mut()
-        .append(AllowFileWritePrefixPolicy::new(prefix));
-}
-
-pub fn allow_network_domain(app: &mut App, domain: impl Into<String>) {
-    app.policy_mut().append(AllowDomainFetchPolicy::new(domain));
-}
-
-pub fn allow_action<A, P>(app: &mut App, policy: P)
-where
-    A: Action,
-    P: mvp_core::policy::Policy<KernelPolicyContextFactory, A> + 'static,
-{
-    app.policy_mut().append::<A, P>(policy);
 }
 
 #[cfg(test)]

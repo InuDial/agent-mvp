@@ -1038,8 +1038,6 @@ dependencies = [
  "mvp-contract",
  "mvp-core",
  "mvp-kernel",
- "mvp-tool-builtin",
- "mvp-tool-monty",
  "serde_json",
  "tokio",
  "tracing",
@@ -1062,6 +1060,7 @@ dependencies = [
  "async-trait",
  "mvp-contract",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]

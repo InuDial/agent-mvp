@@ -253,7 +253,7 @@ where
         ctx: &F::Context<'_>,
         action: A,
     ) -> Result<Granted<A>, AuthorizationError> {
-        let span = audit::action_grant_span(action.audit_kind());
+        let span = crate::action_grant_span!(action.audit_kind());
         async {
             let granted = mvp_core::policy::grant_with_engine(self, ctx, action).await;
             match &granted {

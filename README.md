@@ -66,7 +66,7 @@ crates/access-network Network access facade, actions, backend, policies
 crates/access-monty   Monty session access, actions, store, policies
 crates/tool-builtin    Example Rust tools that exercise the architecture
 crates/tool-monty      Monty-backed tool runtime and Monty OS bridge
-crates/app        Concrete tool host, registry, invocation, app policy helpers
+crates/app        Concrete tool host, registry, invocation context
 crates/test-support    Test helpers shared across crates
 examples/demo.rs       Small end-to-end executable example
 ```
@@ -198,15 +198,10 @@ backend or store executors own domain execution.
 
 `mvp-app` is the concrete tool host over `mvp-kernel::runtime::KernelRuntime`.
 
-It provides helpers for:
-
-- registering and invoking tools
-- registering default tools
-- adding common policy defaults
-- configuring Monty and selected access policies
-
 `KernelRuntime` does not know that tools exist; `App` owns the tool registry,
-`AppToolContext`, nested invocation, and app-level ergonomics.
+`AppToolContext`, nested invocation, and invocation ergonomics. Tool registration
+and policy configuration stay explicit at the call site through `app.register`
+and `app.policy_mut().append(...)`.
 
 ### `tool-builtin`
 
