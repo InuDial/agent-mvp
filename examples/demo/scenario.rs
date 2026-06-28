@@ -10,6 +10,15 @@ use serde_json::json;
 
 use crate::tracing_config::LogFormat;
 
+const MONTY_CODE: &str = r#"
+from pathlib import Path
+
+ret = ""
+for i in range(3):
+    ret += Path('hello.txt').read_text() + "\n"
+ret
+"#;
+
 pub async fn run_demo(log_format: LogFormat) {
     let root = std::env::temp_dir().join(format!(
         "tool-plane-demo-{}-{}",
@@ -90,7 +99,7 @@ pub async fn run_demo(log_format: LogFormat) {
             &read_params,
             json!({
                 "session_id": "demo",
-                "code": "from pathlib import Path\nPath('hello.txt').read_text()",
+                "code": MONTY_CODE,
             }),
         )
         .await
