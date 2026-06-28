@@ -6,7 +6,7 @@ use mvp_contract::{Capabilities, InvocationParams, OutputClassification, ToolOut
 use mvp_kernel::error::{AuthorizationError, InputError, ToolError};
 use mvp_kernel::kernel::Kernel;
 use mvp_kernel::policy::{
-    CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
+    KernelPolicyContext, KernelPolicyContextFactory, PolicyEngine, PolicyReport,
 };
 use mvp_kernel::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
 use serde_json::{Value, json};
@@ -19,16 +19,14 @@ enum TestToolPath {
 
 struct EnumPathKernel {
     tools: BTreeMap<TestToolPath, RegisteredTool<EnumPathKernel>>,
-    policy: PolicyPlane<KernelPolicyContextFactory>,
+    policy: AllowAllEngine,
 }
 
 impl EnumPathKernel {
     fn new() -> Self {
-        let mut policy = PolicyPlane::new();
-        policy.prepend_inbound(CapabilityEnvelopePolicy);
         Self {
             tools: BTreeMap::new(),
-            policy,
+            policy: AllowAllEngine,
         }
     }
 
@@ -44,6 +42,19 @@ impl EnumPathKernel {
         let registered = RegisteredTool::from_tool(tool)?;
         self.tools.insert(path, registered);
         Ok(())
+    }
+}
+
+struct AllowAllEngine;
+
+#[async_trait]
+impl PolicyEngine<KernelPolicyContextFactory> for AllowAllEngine {
+    async fn decide<A: mvp_kernel::action::Action>(
+        &self,
+        _ctx: &KernelPolicyContext<'_>,
+        _action: &A,
+    ) -> PolicyReport {
+        PolicyReport::deny_without_match(Vec::new(), Some("No matching policy.".to_owned()))
     }
 }
 
@@ -114,8 +125,8 @@ impl ToolContext<EnumPathKernel> for EnumPathToolContext<'_> {
 #[async_trait]
 impl Kernel for EnumPathKernel {
     type PolicyCxFactory = KernelPolicyContextFactory;
-    type PolicyPlane<'a>
-        = PolicyPlane<KernelPolicyContextFactory>
+    type PolicyEngine<'a>
+        = AllowAllEngine
     where
         Self: 'a;
     type ToolPath = TestToolPath;
@@ -124,7 +135,7 @@ impl Kernel for EnumPathKernel {
     where
         Self: 'a;
 
-    fn policy_plane(&self) -> &Self::PolicyPlane<'_> {
+    fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
         &self.policy
     }
 

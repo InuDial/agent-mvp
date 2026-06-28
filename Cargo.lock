@@ -970,11 +970,11 @@ dependencies = [
 name = "mvp"
 version = "0.1.0"
 dependencies = [
+ "mvp-access-fs",
+ "mvp-access-monty",
  "mvp-app",
  "mvp-contract",
  "mvp-kernel",
- "mvp-service-fs",
- "mvp-service-monty",
  "mvp-tool-builtin",
  "mvp-tool-monty",
  "opentelemetry",
@@ -988,15 +988,52 @@ dependencies = [
 ]
 
 [[package]]
-name = "mvp-app"
+name = "mvp-access-fs"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "mvp-contract",
  "mvp-kernel",
- "mvp-service-fs",
- "mvp-service-monty",
- "mvp-service-network",
+ "mvp-test-support",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "mvp-access-monty"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mvp-contract",
+ "mvp-kernel",
+ "mvp-test-support",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "mvp-access-network"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mvp-contract",
+ "mvp-kernel",
+ "mvp-test-support",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "mvp-app"
+version = "0.1.0"
+dependencies = [
+ "anymap",
+ "async-trait",
+ "mvp-access-fs",
+ "mvp-access-monty",
+ "mvp-access-network",
+ "mvp-contract",
+ "mvp-kernel",
  "mvp-tool-monty",
  "serde_json",
  "tokio",
@@ -1017,7 +1054,6 @@ dependencies = [
 name = "mvp-kernel"
 version = "0.1.0"
 dependencies = [
- "anymap",
  "async-trait",
  "mvp-contract",
  "serde_json",
@@ -1026,47 +1062,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "mvp-service-fs"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "mvp-contract",
- "mvp-kernel",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "mvp-service-monty"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "mvp-contract",
- "mvp-kernel",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "mvp-service-network"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "mvp-contract",
- "mvp-kernel",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "mvp-test-support"
 version = "0.1.0"
 dependencies = [
+ "anymap",
  "async-trait",
+ "mvp-access-fs",
+ "mvp-access-network",
  "mvp-contract",
  "mvp-kernel",
- "mvp-service-fs",
- "mvp-service-network",
  "serde_json",
 ]
 
@@ -1075,10 +1079,10 @@ name = "mvp-tool-builtin"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "mvp-access-fs",
+ "mvp-access-network",
  "mvp-contract",
  "mvp-kernel",
- "mvp-service-fs",
- "mvp-service-network",
  "mvp-test-support",
  "serde_json",
  "tokio",
@@ -1090,11 +1094,11 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "monty",
+ "mvp-access-fs",
+ "mvp-access-monty",
+ "mvp-access-network",
  "mvp-contract",
  "mvp-kernel",
- "mvp-service-fs",
- "mvp-service-monty",
- "mvp-service-network",
  "mvp-test-support",
  "mvp-tool-builtin",
  "serde_json",

@@ -1,26 +1,28 @@
 use async_trait::async_trait;
+use mvp_access_fs::{
+    AllowWorkspaceFsPolicy, CanonicalRoot, FsAccess, FsAction, HasFsAccess, HasFsBackend,
+    StdFsBackend,
+};
+use mvp_access_network::{
+    HasNetworkAccess, HasNetworkBackend, NetworkAccess, StaticNetworkBackend,
+};
 use mvp_contract::{Capabilities, InvocationParams, ToolOutcome, ToolSpec};
 use mvp_kernel::kernel::Kernel;
 use mvp_kernel::tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration};
 use mvp_kernel::{
     audit,
     error::{AuthorizationError, ToolError},
-    policy::{
-        CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
-    },
-};
-use mvp_service_fs::{
-    AllowWorkspaceFsPolicy, CanonicalRoot, FsAction, FsService, HasFsBackend, HasFsService,
-    StdFsBackend,
-};
-use mvp_service_network::{
-    HasNetworkBackend, HasNetworkService, NetworkService, StaticNetworkBackend,
+    policy::{KernelPolicyContext, KernelPolicyContextFactory},
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+pub mod policy_pipeline;
+
+pub use policy_pipeline::{CapabilityEnvelopePolicy, TestPolicyPipeline};
 
 static NEXT_TEST_WORKSPACE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -75,12 +77,12 @@ pub struct MockKernel {
     tools: BTreeMap<String, RegisteredTool<MockKernel>>,
     fs: StdFsBackend,
     network: StaticNetworkBackend,
-    pub policy: PolicyPlane<KernelPolicyContextFactory>,
+    pub policy: TestPolicyPipeline<KernelPolicyContextFactory>,
 }
 
 impl MockKernel {
     pub fn new() -> Self {
-        let mut policy = PolicyPlane::new();
+        let mut policy = TestPolicyPipeline::new();
         policy.prepend_inbound(CapabilityEnvelopePolicy);
         policy.append::<FsAction, _>(AllowWorkspaceFsPolicy);
 
@@ -236,23 +238,23 @@ impl ToolContext<MockKernel> for MockToolContext<'_> {
     }
 }
 
-impl HasFsService<MockKernel> for MockToolContext<'_> {
-    fn fs(&self) -> FsService<'_, MockKernel> {
-        FsService::new(self.kernel, self.workspace_root(), self.policy_context())
+impl HasFsAccess<MockKernel> for MockToolContext<'_> {
+    fn fs(&self) -> FsAccess<'_, MockKernel> {
+        FsAccess::new(self.kernel, self.workspace_root(), self.policy_context())
     }
 }
 
-impl HasNetworkService<MockKernel> for MockToolContext<'_> {
-    fn network(&self) -> NetworkService<'_, MockKernel> {
-        NetworkService::new(self.kernel, self.policy_context())
+impl HasNetworkAccess<MockKernel> for MockToolContext<'_> {
+    fn network(&self) -> NetworkAccess<'_, MockKernel> {
+        NetworkAccess::new(self.kernel, self.policy_context())
     }
 }
 
 #[async_trait]
 impl Kernel for MockKernel {
     type PolicyCxFactory = KernelPolicyContextFactory;
-    type PolicyPlane<'a>
-        = PolicyPlane<KernelPolicyContextFactory>
+    type PolicyEngine<'a>
+        = TestPolicyPipeline<KernelPolicyContextFactory>
     where
         Self: 'a;
     type ToolPath = String;
@@ -261,7 +263,7 @@ impl Kernel for MockKernel {
     where
         Self: 'a;
 
-    fn policy_plane(&self) -> &Self::PolicyPlane<'_> {
+    fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
         &self.policy
     }
 

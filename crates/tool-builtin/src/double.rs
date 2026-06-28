@@ -53,10 +53,10 @@ where
 mod tests {
     use super::*;
     use crate::read_file::ReadFileTool;
+    use mvp_access_fs::AllowWorkspaceReadPolicy;
     use mvp_contract::InvocationParams;
     use mvp_contract::{Capabilities, Capability, OutputClassification};
     use mvp_kernel::error::{AuthorizationError, ToolError};
-    use mvp_service_fs::AllowWorkspaceReadPolicy;
     use mvp_test_support::{MockKernel, TempWorkspace};
     use serde_json::json;
 

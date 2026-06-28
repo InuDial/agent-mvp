@@ -2,31 +2,33 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use async_trait::async_trait;
+use mvp_access_fs::{CanonicalRoot, FsAccess, HasFsAccess, HasFsBackend, StdFsBackend};
+use mvp_access_monty::{
+    HasMontySessionAccess, HasMontySessionStore, MemoryMontySessionStore, MontySessionAccess,
+};
+use mvp_access_network::{DenyNetworkBackend, HasNetworkAccess, HasNetworkBackend, NetworkAccess};
 use mvp_contract::{Capabilities, InvocationParams, ToolOutcome};
 use mvp_kernel::{
     audit,
     error::{AuthorizationError, InputError, ToolError},
     kernel::Kernel,
-    policy::{
-        CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
-    },
+    policy::{KernelPolicyContext, KernelPolicyContextFactory},
     tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
 };
-use mvp_service_fs::{CanonicalRoot, FsService, HasFsBackend, HasFsService, StdFsBackend};
-use mvp_service_monty::{
-    HasMontySessionService, HasMontySessionStore, MemoryMontySessionStore, MontySessionService,
-};
-use mvp_service_network::{
-    DenyNetworkBackend, HasNetworkBackend, HasNetworkService, NetworkService,
-};
 use serde_json::Value;
+
+mod policy_pipeline;
+
+pub use policy_pipeline::{
+    AllowAllPolicy, CapabilityEnvelopePolicy, PolicyAnyWrapper, PolicyPipeline,
+};
 
 pub struct App {
     tools: BTreeMap<String, RegisteredTool<App>>,
     fs: StdFsBackend,
     network: DenyNetworkBackend,
     monty_sessions: MemoryMontySessionStore,
-    pub policy: PolicyPlane<KernelPolicyContextFactory>,
+    pub policy: PolicyPipeline<KernelPolicyContextFactory>,
 }
 
 impl Default for App {
@@ -37,7 +39,7 @@ impl Default for App {
 
 impl App {
     pub fn new() -> Self {
-        let mut policy = PolicyPlane::new();
+        let mut policy = PolicyPipeline::new();
         policy.prepend_inbound(CapabilityEnvelopePolicy);
 
         Self {
@@ -186,29 +188,29 @@ impl ToolContext<App> for AppToolContext<'_> {
     }
 }
 
-impl HasFsService<App> for AppToolContext<'_> {
-    fn fs(&self) -> FsService<'_, App> {
-        FsService::new(self.app, self.workspace_root(), self.policy_context())
+impl HasFsAccess<App> for AppToolContext<'_> {
+    fn fs(&self) -> FsAccess<'_, App> {
+        FsAccess::new(self.app, self.workspace_root(), self.policy_context())
     }
 }
 
-impl HasNetworkService<App> for AppToolContext<'_> {
-    fn network(&self) -> NetworkService<'_, App> {
-        NetworkService::new(self.app, self.policy_context())
+impl HasNetworkAccess<App> for AppToolContext<'_> {
+    fn network(&self) -> NetworkAccess<'_, App> {
+        NetworkAccess::new(self.app, self.policy_context())
     }
 }
 
-impl HasMontySessionService<App> for AppToolContext<'_> {
-    fn monty_sessions(&self) -> MontySessionService<'_, App> {
-        MontySessionService::new(self.app, self.workspace_root(), self.policy_context())
+impl HasMontySessionAccess<App> for AppToolContext<'_> {
+    fn monty_sessions(&self) -> MontySessionAccess<'_, App> {
+        MontySessionAccess::new(self.app, self.workspace_root(), self.policy_context())
     }
 }
 
 #[async_trait]
 impl Kernel for App {
     type PolicyCxFactory = KernelPolicyContextFactory;
-    type PolicyPlane<'a>
-        = PolicyPlane<KernelPolicyContextFactory>
+    type PolicyEngine<'a>
+        = PolicyPipeline<KernelPolicyContextFactory>
     where
         Self: 'a;
 
@@ -218,7 +220,7 @@ impl Kernel for App {
     where
         Self: 'a;
 
-    fn policy_plane(&self) -> &Self::PolicyPlane<'_> {
+    fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
         &self.policy
     }
 
@@ -255,9 +257,9 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use async_trait::async_trait;
+    use mvp_access_fs::{AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, FsBackend};
     use mvp_contract::{Capabilities, Capability, OutputClassification, ToolSpec};
     use mvp_kernel::error::{AuthorizationError, ExecutionError, InputError};
-    use mvp_service_fs::{AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, FsBackend};
     use serde_json::{Value, json};
 
     static NEXT_TEST_WORKSPACE_ID: AtomicU64 = AtomicU64::new(1);
@@ -329,7 +331,7 @@ mod tests {
     impl<K> ToolImpl<K> for ReadWorkspaceFileTool
     where
         K: Kernel + FsBackend,
-        for<'a> K::ToolCx<'a>: HasFsService<K>,
+        for<'a> K::ToolCx<'a>: HasFsAccess<K>,
     {
         type Input = String;
         type Output = ToolOutcome;
@@ -337,7 +339,7 @@ mod tests {
         fn spec(&self) -> ToolSpec {
             ToolSpec {
                 name: "read_workspace_file".into(),
-                description: "Read a workspace file through the fs service.".into(),
+                description: "Read a workspace file through fs access.".into(),
                 capabilities: [Capability::FsRead].into(),
             }
         }

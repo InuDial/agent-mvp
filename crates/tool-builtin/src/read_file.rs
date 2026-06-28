@@ -1,9 +1,9 @@
 use async_trait::async_trait;
+use mvp_access_fs::{FsBackend, HasFsAccess};
 use mvp_contract::{Capability, OutputClassification, ToolOutcome, ToolSpec};
 use mvp_kernel::error::{InputError, ToolError};
 use mvp_kernel::kernel::Kernel;
 use mvp_kernel::tool::ToolImpl;
-use mvp_service_fs::{FsBackend, HasFsService};
 use serde_json::{Value, json};
 
 pub struct ReadFileTool;
@@ -29,7 +29,7 @@ impl From<ReadFileOutput> for ToolOutcome {
 impl<K> ToolImpl<K> for ReadFileTool
 where
     K: Kernel + FsBackend,
-    for<'a> K::ToolCx<'a>: HasFsService<K>,
+    for<'a> K::ToolCx<'a>: HasFsAccess<K>,
 {
     type Input = ReadFileInput;
     type Output = ReadFileOutput;
@@ -70,8 +70,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mvp_access_fs::AllowWorkspaceReadPolicy;
     use mvp_contract::InvocationParams;
-    use mvp_service_fs::AllowWorkspaceReadPolicy;
     use mvp_test_support::{MockKernel, TempWorkspace};
 
     #[tokio::test]

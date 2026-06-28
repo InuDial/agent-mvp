@@ -1,16 +1,13 @@
 use anymap::{Map as AnyMap, any::Any as AnyMapAny};
 use async_trait::async_trait;
 use std::{any::Any, collections::VecDeque, marker::PhantomData};
-use tracing::Instrument;
 
-use crate::action::Action;
-use crate::error::AuthorizationError;
-use crate::tool::next_grant_id;
-use crate::{audit, policy::PolicyContextFactory};
-
-use super::{
-    GrantRecord, Granted, Policy, PolicyAny, PolicyContext, PolicyDecision, PolicyEngine,
-    PolicyGrant, PolicyId,
+use mvp_kernel::{
+    action::Action,
+    policy::{
+        Policy, PolicyAny, PolicyContext, PolicyContextFactory, PolicyDecision, PolicyEngine,
+        PolicyEvaluation, PolicyGrant, PolicyId, PolicyReport,
+    },
 };
 
 type SyncAnyMap = AnyMap<dyn AnyMapAny + Send + Sync>;
@@ -58,16 +55,6 @@ where
     }
 }
 
-struct RegisteredPolicy<F: PolicyContextFactory, A: Action> {
-    id: PolicyId,
-    inner: Box<dyn Policy<F, A>>,
-}
-
-struct RegisteredPolicyAny<F: PolicyContextFactory> {
-    id: PolicyId,
-    inner: Box<dyn PolicyAny<F>>,
-}
-
 /// Built-in coarse capability gate.
 ///
 /// This policy only vetoes actions that exceed the current effective capability
@@ -103,7 +90,7 @@ where
     }
 }
 
-/// Minimal permissive fallback used by the current MVP tool plane.
+/// Minimal permissive fallback used by the current MVP tool pipeline.
 pub struct AllowAllPolicy;
 
 #[async_trait]
@@ -118,161 +105,129 @@ impl<F: PolicyContextFactory> PolicyAny<F> for AllowAllPolicy {
     }
 }
 
-pub struct PolicyPlane<F: PolicyContextFactory> {
+struct RegisteredPolicy<F: PolicyContextFactory, A: Action> {
+    id: PolicyId,
+    inner: Box<dyn Policy<F, A>>,
+}
+
+struct RegisteredPolicyAny<F: PolicyContextFactory> {
+    id: PolicyId,
+    inner: Box<dyn PolicyAny<F>>,
+}
+
+pub struct PolicyPipeline<F: PolicyContextFactory> {
     next_policy_id: PolicyId,
-    // A -> VecDeque<RegisteredPolicy<Cx, A>>
     policy_entries: SyncAnyMap,
     global_policies_inbound: VecDeque<RegisteredPolicyAny<F>>,
     global_policies_outbound: VecDeque<RegisteredPolicyAny<F>>,
 }
 
-impl<F: PolicyContextFactory> Default for PolicyPlane<F> {
+impl<F: PolicyContextFactory> Default for PolicyPipeline<F> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait]
-impl<F> PolicyEngine<F> for PolicyPlane<F>
+impl<F> PolicyEngine<F> for PolicyPipeline<F>
 where
     F: PolicyContextFactory,
 {
-    async fn grant<A: Action>(
-        &self,
-        ctx: &F::Context<'_>,
-        action: A,
-    ) -> Result<Granted<A>, AuthorizationError> {
-        let action_kind = action.audit_kind();
-        let resource = action.audit_resource();
+    async fn decide<A: Action>(&self, ctx: &F::Context<'_>, action: &A) -> PolicyReport {
+        let mut evaluations = Vec::new();
 
-        async {
-            for policy in &self.global_policies_inbound {
-                let policy_grant = policy.inner.grant(ctx, &action).await;
-                audit::record_policy_grant(
-                    action_kind,
-                    &resource,
-                    policy.inner.name(),
-                    policy.id,
-                    "inbound",
-                    &policy_grant,
-                );
-                let (decision, reason) = policy_grant.into_decision_and_reason();
-                match decision {
-                    PolicyDecision::Allow | PolicyDecision::Abstain => {}
-                    PolicyDecision::Deny => {
-                        let reason = reason.unwrap_or_else(|| "policy denied action".into());
-                        let record = GrantRecord::deny_from_policy(
-                            action_kind,
-                            resource.clone(),
-                            policy.inner.name(),
-                            policy.id,
-                            Some(reason.clone()),
-                        );
-                        audit::record_grant(&record);
-                        return Err(AuthorizationError::Denied(reason));
-                    }
-                }
-            }
-
-            if let Some(entries) = self
-                .policy_entries
-                .get::<VecDeque<RegisteredPolicy<F, A>>>()
-            {
-                for policy in entries {
-                    let policy_grant = policy.inner.grant(ctx, &action).await;
-                    audit::record_policy_grant(
-                        action_kind,
-                        &resource,
+        for policy in &self.global_policies_inbound {
+            let policy_grant = policy.inner.grant(ctx, action).await;
+            let (decision, reason) = policy_grant.clone().into_decision_and_reason();
+            evaluations.push(PolicyEvaluation::new(
+                policy.inner.name(),
+                policy.id,
+                "inbound",
+                policy_grant,
+            ));
+            match decision {
+                PolicyDecision::Allow | PolicyDecision::Abstain => {}
+                PolicyDecision::Deny => {
+                    return PolicyReport::deny_from_policy(
+                        evaluations,
                         policy.inner.name(),
                         policy.id,
-                        "action",
-                        &policy_grant,
+                        reason,
                     );
-                    let (decision, reason) = policy_grant.into_decision_and_reason();
-                    match decision {
-                        PolicyDecision::Allow => {
-                            let grant_id = next_grant_id();
-                            let record = GrantRecord::allow(
-                                grant_id,
-                                action_kind,
-                                resource.clone(),
-                                policy.inner.name(),
-                                policy.id,
-                                reason,
-                            );
-                            audit::record_grant(&record);
-                            return Ok(Granted::new(grant_id, action));
-                        }
-                        PolicyDecision::Deny => {
-                            let reason = reason.unwrap_or_else(|| "policy denied action".into());
-                            let record = GrantRecord::deny_from_policy(
-                                action_kind,
-                                resource.clone(),
-                                policy.inner.name(),
-                                policy.id,
-                                Some(reason.clone()),
-                            );
-                            audit::record_grant(&record);
-                            return Err(AuthorizationError::Denied(reason));
-                        }
-                        PolicyDecision::Abstain => {}
-                    }
                 }
             }
+        }
 
-            for policy in &self.global_policies_outbound {
-                let policy_grant = policy.inner.grant(ctx, &action).await;
-                audit::record_policy_grant(
-                    action_kind,
-                    &resource,
+        if let Some(entries) = self
+            .policy_entries
+            .get::<VecDeque<RegisteredPolicy<F, A>>>()
+        {
+            for policy in entries {
+                let policy_grant = policy.inner.grant(ctx, action).await;
+                let (decision, reason) = policy_grant.clone().into_decision_and_reason();
+                evaluations.push(PolicyEvaluation::new(
                     policy.inner.name(),
                     policy.id,
-                    "outbound",
-                    &policy_grant,
-                );
-                let (decision, reason) = policy_grant.into_decision_and_reason();
+                    "action",
+                    policy_grant,
+                ));
                 match decision {
                     PolicyDecision::Allow => {
-                        let grant_id = next_grant_id();
-                        let record = GrantRecord::allow(
-                            grant_id,
-                            action_kind,
-                            resource.clone(),
+                        return PolicyReport::allow(
+                            evaluations,
                             policy.inner.name(),
                             policy.id,
                             reason,
                         );
-                        audit::record_grant(&record);
-                        return Ok(Granted::new(grant_id, action));
                     }
                     PolicyDecision::Deny => {
-                        let reason = reason.unwrap_or_else(|| "policy denied action".into());
-                        let record = GrantRecord::deny_from_policy(
-                            action_kind,
-                            resource.clone(),
+                        return PolicyReport::deny_from_policy(
+                            evaluations,
                             policy.inner.name(),
                             policy.id,
-                            Some(reason.clone()),
+                            reason,
                         );
-                        audit::record_grant(&record);
-                        return Err(AuthorizationError::Denied(reason));
                     }
                     PolicyDecision::Abstain => {}
                 }
             }
-
-            let reason = "No matching policy.".to_owned();
-            let record =
-                GrantRecord::deny_without_match(action_kind, resource, Some(reason.clone()));
-            audit::record_grant(&record);
-            Err(AuthorizationError::Denied(reason))
         }
-        .instrument(audit::action_grant_span(action_kind))
-        .await
+
+        for policy in &self.global_policies_outbound {
+            let policy_grant = policy.inner.grant(ctx, action).await;
+            let (decision, reason) = policy_grant.clone().into_decision_and_reason();
+            evaluations.push(PolicyEvaluation::new(
+                policy.inner.name(),
+                policy.id,
+                "outbound",
+                policy_grant,
+            ));
+            match decision {
+                PolicyDecision::Allow => {
+                    return PolicyReport::allow(
+                        evaluations,
+                        policy.inner.name(),
+                        policy.id,
+                        reason,
+                    );
+                }
+                PolicyDecision::Deny => {
+                    return PolicyReport::deny_from_policy(
+                        evaluations,
+                        policy.inner.name(),
+                        policy.id,
+                        reason,
+                    );
+                }
+                PolicyDecision::Abstain => {}
+            }
+        }
+
+        PolicyReport::deny_without_match(evaluations, Some("No matching policy.".to_owned()))
     }
 }
 
-impl<F: PolicyContextFactory> PolicyPlane<F> {
+impl<F: PolicyContextFactory> PolicyPipeline<F> {
     pub fn new() -> Self {
         Self {
             next_policy_id: 1,

@@ -22,7 +22,7 @@ pub type PolicyContextFor<'a, K> =
 #[async_trait]
 pub trait Kernel: Sync {
     type PolicyCxFactory: PolicyContextFactory;
-    type PolicyPlane<'a>: PolicyEngine<Self::PolicyCxFactory>
+    type PolicyEngine<'a>: PolicyEngine<Self::PolicyCxFactory>
     where
         Self: 'a;
 
@@ -31,7 +31,7 @@ pub trait Kernel: Sync {
     where
         Self: 'a;
 
-    fn policy_plane(&self) -> &Self::PolicyPlane<'_>;
+    fn policy_engine(&self) -> &Self::PolicyEngine<'_>;
 
     fn decode_tool_path(value: &Value) -> Result<Self::ToolPath, InputError>;
 

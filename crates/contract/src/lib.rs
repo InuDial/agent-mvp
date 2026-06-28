@@ -25,7 +25,7 @@ pub enum OutputClassification {
 /// It is used as the default effective capability envelope when a top-level
 /// invocation does not provide an override. The invocation's actual effective
 /// capabilities are carried by the kernel's runtime context and enforced later
-/// through the policy plane during action / grant evaluation.
+/// through the policy engine during action / grant evaluation.
 #[derive(Clone, Debug)]
 pub struct ToolSpec {
     pub name: ToolName,
@@ -34,7 +34,7 @@ pub struct ToolSpec {
     ///
     /// This is not, by itself, the source of truth for every invocation's final
     /// effective capabilities. The kernel may supply a per-invocation effective
-    /// capability envelope, and the policy plane is responsible for enforcing
+    /// capability envelope, and the policy engine is responsible for enforcing
     /// that envelope during authorization.
     pub capabilities: Capabilities,
     // etc

@@ -78,3 +78,116 @@ pub enum GrantSource {
     },
     NoMatchingPolicy,
 }
+
+#[derive(Clone, Debug)]
+pub struct PolicyEvaluation {
+    policy_name: &'static str,
+    policy_id: PolicyId,
+    policy_stage: &'static str,
+    grant: PolicyGrant,
+}
+
+impl PolicyEvaluation {
+    pub fn new(
+        policy_name: &'static str,
+        policy_id: PolicyId,
+        policy_stage: &'static str,
+        grant: PolicyGrant,
+    ) -> Self {
+        Self {
+            policy_name,
+            policy_id,
+            policy_stage,
+            grant,
+        }
+    }
+
+    pub fn policy_name(&self) -> &'static str {
+        self.policy_name
+    }
+
+    pub fn policy_id(&self) -> PolicyId {
+        self.policy_id
+    }
+
+    pub fn policy_stage(&self) -> &'static str {
+        self.policy_stage
+    }
+
+    pub fn grant(&self) -> &PolicyGrant {
+        &self.grant
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum PolicyOutcome {
+    Allow {
+        policy_name: &'static str,
+        policy_id: PolicyId,
+        reason: Option<String>,
+    },
+    Deny {
+        source: GrantSource,
+        reason: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct PolicyReport {
+    evaluations: Vec<PolicyEvaluation>,
+    outcome: PolicyOutcome,
+}
+
+impl PolicyReport {
+    pub fn allow(
+        evaluations: Vec<PolicyEvaluation>,
+        policy_name: &'static str,
+        policy_id: PolicyId,
+        reason: Option<String>,
+    ) -> Self {
+        Self {
+            evaluations,
+            outcome: PolicyOutcome::Allow {
+                policy_name,
+                policy_id,
+                reason,
+            },
+        }
+    }
+
+    pub fn deny_from_policy(
+        evaluations: Vec<PolicyEvaluation>,
+        policy_name: &'static str,
+        policy_id: PolicyId,
+        reason: Option<String>,
+    ) -> Self {
+        Self {
+            evaluations,
+            outcome: PolicyOutcome::Deny {
+                source: GrantSource::Policy {
+                    policy_name,
+                    policy_id,
+                },
+                reason,
+            },
+        }
+    }
+
+    pub fn deny_without_match(evaluations: Vec<PolicyEvaluation>, reason: Option<String>) -> Self {
+        Self {
+            evaluations,
+            outcome: PolicyOutcome::Deny {
+                source: GrantSource::NoMatchingPolicy,
+                reason,
+            },
+        }
+    }
+
+    pub fn evaluations(&self) -> &[PolicyEvaluation] {
+        &self.evaluations
+    }
+
+    pub fn into_outcome(self) -> PolicyOutcome {
+        self.outcome
+    }
+}

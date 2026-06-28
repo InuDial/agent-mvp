@@ -8,14 +8,14 @@ use mvp_kernel::tool::ToolContext;
 use crate::{MontySessionKey, MontySessionLoadAction, MontySessionSaveAction, MontySessionStore};
 
 /// Tool-context extension used by Monty tools to read and persist REPL state.
-pub trait HasMontySessionService<K>: ToolContext<K>
+pub trait HasMontySessionAccess<K>: ToolContext<K>
 where
     K: Kernel + MontySessionStore,
 {
-    fn monty_sessions(&self) -> MontySessionService<'_, K>;
+    fn monty_sessions(&self) -> MontySessionAccess<'_, K>;
 }
 
-pub struct MontySessionService<'a, K>
+pub struct MontySessionAccess<'a, K>
 where
     K: Kernel + MontySessionStore + ?Sized,
 {
@@ -24,7 +24,7 @@ where
     workspace_root: PathBuf,
 }
 
-impl<'a, K> MontySessionService<'a, K>
+impl<'a, K> MontySessionAccess<'a, K>
 where
     K: Kernel + MontySessionStore,
 {
@@ -46,7 +46,7 @@ where
             MontySessionLoadAction::new(MontySessionKey::new(&self.workspace_root, session_id));
         let granted = self
             .kernel
-            .policy_plane()
+            .policy_engine()
             .grant(&self.policy_context, action)
             .await
             .map_err(ExecutionError::Authorization)?;
@@ -62,7 +62,7 @@ where
         );
         let granted = self
             .kernel
-            .policy_plane()
+            .policy_engine()
             .grant(&self.policy_context, action)
             .await
             .map_err(ExecutionError::Authorization)?;

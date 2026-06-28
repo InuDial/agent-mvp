@@ -1,7 +1,7 @@
-//! Shared action traits used by service facades, policy, and execution.
+//! Shared action traits used by access facades, policy, and execution.
 //!
-//! An `Action` is the semantic unit that policy understands. Service facades
-//! construct actions from tool requests, the policy plane grants or denies them,
+//! An `Action` is the semantic unit that policy understands. Access facades
+//! construct actions from tool requests, the policy engine grants or denies them,
 //! and only `Granted<Action>` values can execute through an executor.
 
 use std::any::Any;
@@ -22,8 +22,8 @@ pub enum AuditResource {
 
 /// A primitive service action.
 ///
-/// Actions are the semantic units understood by policy. Service façades may
-/// construct them internally before asking the policy plane for authorization.
+/// Actions are the semantic units understood by policy. Access façades may
+/// construct them internally before asking the policy engine for authorization.
 pub trait Action: Any + Send + Sync {
     fn capabilities(&self) -> Capabilities;
 

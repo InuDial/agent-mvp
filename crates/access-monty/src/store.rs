@@ -122,21 +122,20 @@ mod tests {
     use mvp_kernel::error::{InputError, ToolError};
     use mvp_kernel::kernel::Kernel;
     use mvp_kernel::policy::{
-        CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory,
-        PolicyContextFactory, PolicyPlane,
+        KernelPolicyContext, KernelPolicyContextFactory, PolicyContextFactory,
     };
     use mvp_kernel::tool::{ToolContext, ToolRegistration};
+    use mvp_test_support::{CapabilityEnvelopePolicy, TestPolicyPipeline};
     use serde_json::Value;
     use std::path::{Path, PathBuf};
 
     use crate::{
-        AllowMontySessionPolicy, MontySessionLoadAction, MontySessionSaveAction,
-        MontySessionService,
+        AllowMontySessionPolicy, MontySessionAccess, MontySessionLoadAction, MontySessionSaveAction,
     };
 
     struct TestKernel {
         store: MemoryMontySessionStore,
-        policy: PolicyPlane<KernelPolicyContextFactory>,
+        policy: TestPolicyPipeline<KernelPolicyContextFactory>,
     }
 
     struct UnusedToolContext {
@@ -179,7 +178,7 @@ mod tests {
 
     impl TestKernel {
         fn new() -> Self {
-            let mut policy = PolicyPlane::new();
+            let mut policy = TestPolicyPipeline::new();
             policy.prepend_inbound(CapabilityEnvelopePolicy);
             policy.append::<MontySessionLoadAction, _>(AllowMontySessionPolicy);
             policy.append::<MontySessionSaveAction, _>(AllowMontySessionPolicy);
@@ -201,8 +200,8 @@ mod tests {
     #[async_trait]
     impl Kernel for TestKernel {
         type PolicyCxFactory = KernelPolicyContextFactory;
-        type PolicyPlane<'a>
-            = PolicyPlane<KernelPolicyContextFactory>
+        type PolicyEngine<'a>
+            = TestPolicyPipeline<KernelPolicyContextFactory>
         where
             Self: 'a;
 
@@ -212,7 +211,7 @@ mod tests {
         where
             Self: 'a;
 
-        fn policy_plane(&self) -> &Self::PolicyPlane<'_> {
+        fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
             &self.policy
         }
 
@@ -233,8 +232,8 @@ mod tests {
     fn service<'a>(
         kernel: &'a TestKernel,
         workspace_root: &'a Path,
-    ) -> MontySessionService<'a, TestKernel> {
-        MontySessionService::new(
+    ) -> MontySessionAccess<'a, TestKernel> {
+        MontySessionAccess::new(
             kernel,
             workspace_root,
             KernelPolicyContext::new(Capabilities::empty(), workspace_root),

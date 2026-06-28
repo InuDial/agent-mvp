@@ -2,10 +2,9 @@ use async_trait::async_trait;
 use mvp_contract::{Capabilities, Capability, InvocationParams, ToolOutcome, ToolSpec};
 use mvp_kernel::error::{AuthorizationError, ExecutionError, InputError, ToolError};
 use mvp_kernel::kernel::Kernel;
-use mvp_kernel::policy::{
-    CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
-};
+use mvp_kernel::policy::{KernelPolicyContext, KernelPolicyContextFactory};
 use mvp_kernel::tool::{ToolContext, ToolRegistration};
+use mvp_test_support::{CapabilityEnvelopePolicy, TestPolicyPipeline};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -22,7 +21,7 @@ struct TempWorkspace {
 impl TempWorkspace {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
-            "mvp-service-fs-test-{}-{}-{}",
+            "mvp-access-fs-test-{}-{}-{}",
             std::process::id(),
             NEXT_TEST_WORKSPACE_ID.fetch_add(1, Ordering::Relaxed),
             SystemTime::now()
@@ -90,20 +89,20 @@ impl ToolContext<TestKernel> for UnusedToolContext<'_> {
     }
 }
 
-impl HasFsService<TestKernel> for UnusedToolContext<'_> {
-    fn fs(&self) -> FsService<'_, TestKernel> {
-        FsService::new(self.kernel, self.workspace_root(), self.policy_context())
+impl HasFsAccess<TestKernel> for UnusedToolContext<'_> {
+    fn fs(&self) -> FsAccess<'_, TestKernel> {
+        FsAccess::new(self.kernel, self.workspace_root(), self.policy_context())
     }
 }
 
 struct TestKernel {
     fs: StdFsBackend,
-    policy: PolicyPlane<KernelPolicyContextFactory>,
+    policy: TestPolicyPipeline<KernelPolicyContextFactory>,
 }
 
 impl TestKernel {
     fn new() -> Self {
-        let mut policy = PolicyPlane::new();
+        let mut policy = TestPolicyPipeline::new();
         policy.prepend_inbound(CapabilityEnvelopePolicy);
         policy.append::<FsAction, _>(AllowWorkspaceFsPolicy);
         Self {
@@ -124,8 +123,8 @@ impl HasFsBackend for TestKernel {
 #[async_trait]
 impl Kernel for TestKernel {
     type PolicyCxFactory = KernelPolicyContextFactory;
-    type PolicyPlane<'a>
-        = PolicyPlane<KernelPolicyContextFactory>
+    type PolicyEngine<'a>
+        = TestPolicyPipeline<KernelPolicyContextFactory>
     where
         Self: 'a;
 
@@ -135,7 +134,7 @@ impl Kernel for TestKernel {
     where
         Self: 'a;
 
-    fn policy_plane(&self) -> &Self::PolicyPlane<'_> {
+    fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
         &self.policy
     }
 

@@ -1,10 +1,10 @@
 # mvp
 
 A Rust MVP for a layered tool-execution architecture with explicit capabilities,
-policy checks, service mediation, and audit records.
+policy checks, access mediation, and audit records.
 
 The project is intentionally small. Its main artifact is the runtime architecture:
-tools do not perform side effects directly; they request kernel-owned services,
+tools do not perform side effects directly; they request kernel-owned access facades,
 which turn requests into auditable actions and authorize them through policy.
 
 ## Start here
@@ -13,9 +13,9 @@ The whole design can be summarized as:
 
 ```text
 ToolImpl
-  -> Service facade
+  -> Access facade
   -> Action
-  -> PolicyPlane
+  -> PolicyEngine / PolicyPipeline
   -> Granted<Action>
   -> Executor
   -> Audit
@@ -32,23 +32,24 @@ If you want to jump straight into code, read in this order:
 
 1. `crates/kernel/src/action.rs`
 2. `crates/kernel/src/policy/decision.rs`
-3. `crates/kernel/src/policy/plane.rs`
+3. `crates/kernel/src/policy/traits.rs`
 4. `crates/kernel/src/policy/grant.rs`
-5. `crates/service-fs/src/service.rs`
-6. `crates/service-fs/src/action.rs`
-7. `crates/service-fs/src/policy.rs`
-8. `crates/service-network/src/service.rs`
-9. `crates/service-monty/src/service.rs`
-10. `crates/kernel/src/audit.rs`
-11. `crates/app/src/lib.rs`
-12. `crates/tool-builtin/src`
-13. `crates/tool-monty/src/lib.rs`
+5. `crates/app/src/policy_pipeline.rs`
+6. `crates/access-fs/src/access.rs`
+7. `crates/access-fs/src/action.rs`
+8. `crates/access-fs/src/policy.rs`
+9. `crates/access-network/src/access.rs`
+10. `crates/access-monty/src/access.rs`
+11. `crates/kernel/src/audit.rs`
+12. `crates/app/src/lib.rs`
+13. `crates/tool-builtin/src`
+14. `crates/tool-monty/src/lib.rs`
 
 ## Architecture goals
 
 - Keep protocol types separate from runtime execution.
-- Route all tool side effects through service facades.
-- Represent service operations as explicit `Action` values.
+- Route all tool side effects through access facades.
+- Represent access operations as explicit `Action` values.
 - Evaluate coarse capabilities before resource-specific policy.
 - Preserve or reduce authority across nested tool calls, never expand it.
 - Emit audit records around invocation, authorization, and execution.
@@ -58,12 +59,12 @@ If you want to jump straight into code, read in this order:
 ```text
 crates/contract   Shared protocol, metadata, capabilities, invocation params
 crates/kernel     Kernel traits, tool context, actions, policy, grants, audit
-crates/service-fs      Filesystem service facade, actions, backend, policies
-crates/service-network Network service facade, actions, backend, policies
-crates/service-monty   Monty session service, actions, store, policies
+crates/access-fs      Filesystem access facade, actions, backend, policies
+crates/access-network Network access facade, actions, backend, policies
+crates/access-monty   Monty session access, actions, store, policies
 crates/tool-builtin    Example Rust tools that exercise the architecture
 crates/tool-monty      Monty-backed tool runtime and Monty OS bridge
-crates/app        Concrete application kernel wiring tools, services, policy
+crates/app        Concrete application kernel wiring tools, access, policy
 crates/test-support    Test helpers shared across crates
 examples/demo.rs       Small end-to-end executable example
 ```
@@ -75,10 +76,10 @@ flowchart TD
     Host[Host / caller] -->|ToolPath + payload + InvocationParams| Invocation[Invocation]
     Invocation -->|per-call runtime state| Context[ToolContext]
     Context -->|input + effective capabilities| Tool[ToolImpl]
-    Tool -->|service call| Service[Service facade]
-    Service -->|Action| Policy[PolicyPlane]
-    Policy -->|Granted<Action>| Service
-    Service -->|authorized domain operation| Executor[Service executor]
+    Tool -->|access call| Access[Access facade]
+    Access -->|Action| Policy[PolicyEngine / PolicyPipeline]
+    Policy -->|Granted<Action>| Access
+    Access -->|authorized domain operation| Executor[Backend / store executor]
     Invocation -->|invocation events| Audit[Audit sink]
     Policy -->|grant decisions| Audit
     Executor -->|execution result / error| Audit
@@ -89,14 +90,14 @@ The logical architecture is about runtime responsibility:
 - **Host / caller** supplies the target tool path, JSON payload, and
   `InvocationParams`.
 - **Invocation** resolves the target tool and creates the per-call context.
-- **Tool context** carries workspace root, effective capabilities, services, and
+- **Tool context** carries workspace root, effective capabilities, access facades, and
   nested invocation.
-- **Tool context** exposes service facades, not kernel or backend handles.
-- **Tool implementation** parses input and asks the context for service access.
-- **Service facade** converts side-effect requests into semantic actions and
+- **Tool context** exposes access facades, not kernel or backend handles.
+- **Tool implementation** parses input and asks the context for domain access.
+- **Access facade** converts side-effect requests into semantic actions and
   executes only after policy returns a grant.
-- **Policy plane** decides whether an action is denied or returned as
-  `Granted<Action>`.
+- **Policy engine** decides whether an action is denied or returned as
+  `Granted<Action>` by the kernel-owned grant path.
 - **Executor** performs the authorized domain operation.
 - **Audit** records invocation events, grant decisions, and execution results.
 
@@ -112,11 +113,11 @@ app
 tool-builtin / tool-monty
   ToolImpl implementations
 
-service-fs / service-network / service-monty
-  concrete service facades, actions, backends or stores, resource policies
+access-fs / access-network / access-monty
+  concrete access facades, actions, backends or stores, resource policies
 
 kernel
-  reusable traits, policy engine, grants, audit, action flow
+  reusable traits, policy model, grants, audit, action flow
 
 contract
   shared request/outcome/spec/capability types
@@ -124,9 +125,9 @@ contract
 
 The implementation layout is about code ownership and dependency direction.
 `contract` is the lowest shared layer. `kernel` defines reusable runtime
-mechanics without concrete service domains. Service crates plug side-effect
+mechanics without concrete access domains. Access crates plug side-effect
 domains into the shared action, policy, grant, and audit flow. `app` wires those
-mechanics and services into a concrete kernel. Tool crates supply tools that can
+mechanics and access facades into a concrete kernel. Tool crates supply tools that can
 run on that kernel-facing abstraction. `examples/demo.rs` composes the pieces.
 
 ### `contract`
@@ -148,24 +149,24 @@ boundary.
 - `Kernel` and `ToolContext` traits
 - tool registration and invocation adapters
 - `Action` and `Granted<Action>` authorization flow
-- inbound, typed, and outbound policy evaluation
+- `PolicyEngine` trait and kernel-owned `grant` flow
 - structured audit helpers
 
 The kernel crate contains the design primitives, but not the concrete application
-state or concrete side-effect services.
+state or concrete side-effect access domains.
 
-### `service-*`
+### `access-*`
 
-Service crates define concrete side-effect domains:
+Access crates define concrete side-effect domains:
 
-- `mvp-service-fs` owns filesystem canonical path types, fs actions, fs facade,
+- `mvp-access-fs` owns filesystem canonical path types, fs actions, fs access facade,
   backend traits, and fs policies.
-- `mvp-service-network` owns network fetch actions, network facade, backend
+- `mvp-access-network` owns network fetch actions, network access facade, backend
   traits, and URL policies.
-- `mvp-service-monty` owns Monty session load/save actions, session facade,
+- `mvp-access-monty` owns Monty session load/save actions, session access facade,
   session store traits, and session policies.
 
-Each service crate uses the kernel's shared `Action`, `PolicyPlane`,
+Each access crate uses the kernel's shared `Action`, `PolicyEngine`,
 `Granted<Action>`, `ActionExecutor`, and audit flow. Actions carry policy and
 audit metadata; backend or store executors own domain execution.
 
@@ -180,7 +181,7 @@ It wires together:
 - `StdFsBackend`
 - `DenyNetworkBackend`
 - `MemoryMontySessionStore`
-- `PolicyPlane`
+- `PolicyPipeline`
 - `CapabilityEnvelopePolicy`
 - `AllowMontySessionPolicy`
 - per-call `AppToolContext`
@@ -205,7 +206,7 @@ boundary:
 - `MontyTool` runs Monty snippets and can expose registered host tools as Monty
   functions.
 - `MontyOsTool` handles supported Monty OS calls, such as `Path.read_text` and
-  `Path.write_text`, by routing them through services like `ctx.fs()`.
+  `Path.write_text`, by routing them through access facades like `ctx.fs()`.
 - Monty REPL state is loaded and saved through `ctx.monty_sessions()`, so session
   persistence remains policy-mediated and auditable.
 
@@ -223,9 +224,9 @@ A top-level call enters through `Kernel::invoke`:
 2. The application builds a `ToolContext`.
 3. The context computes effective capabilities for this invocation.
 4. The tool executes against the context.
-5. Service calls create explicit actions such as `fs.read` or `network.fetch`.
-6. The policy plane evaluates the action.
-7. A granted action executes through the service backend.
+5. Access calls create explicit actions such as `fs.read` or `network.fetch`.
+6. The policy engine evaluates the action.
+7. A granted action executes through the backend or store.
 8. Audit records describe the invocation, grant decision, and execution result.
 
 Nested calls use the same path through `ToolContext::invoke_tool`. By default,
@@ -249,14 +250,15 @@ new authority.
 
 ## Policy model
 
-Actions are authorized by `PolicyPlane` in this order:
+Actions are authorized by the `PolicyEngine` trait. The app's `PolicyPipeline`
+evaluates them in this order:
 
 1. inbound global policies
 2. typed action-specific policies
 3. outbound global policies
 4. default deny
 
-The built-in `CapabilityEnvelopePolicy` is an inbound gate:
+The app's `CapabilityEnvelopePolicy` is an inbound gate:
 
 ```text
 action.capabilities() subset_of current_effective_capabilities
@@ -280,12 +282,13 @@ Each policy returns a `PolicyGrant` containing:
 - `reason`: human-readable explanation
 - `predicate`: diagnostic predicate recorded in DEBUG audit
 
-This keeps policy-specific explanations with the policy while leaving emission
-and final grant handling centralized in `PolicyPlane`.
+This keeps policy-specific explanations with the policy while leaving emission,
+`Granted<Action>` construction, and final grant handling centralized in
+`PolicyEngine::grant` inside `mvp-kernel`.
 
-## Service model
+## Access model
 
-Services are kernel-owned facades over side-effect domains.
+Access facades are kernel-owned facades over side-effect domains.
 
 Current domains:
 
@@ -297,11 +300,11 @@ The facade constructs an action, asks policy for a grant, and only then delegate
 the granted action to a backend or store executor. This keeps tool logic,
 authorization, audit, and domain I/O in separate layers.
 
-Backends perform direct domain operations. Tools receive service facades such as
+Backends perform direct domain operations. Tools receive access facades such as
 `ctx.fs()`, `ctx.network()`, or `ctx.monty_sessions()`, not backend or store
 handles, so ordinary tool code cannot bypass authorization.
 
-Filesystem services canonicalize paths against the workspace root before
+Filesystem access canonicalizes paths against the workspace root before
 authorization and execution. Existing write targets are canonicalized directly;
 new targets are checked by canonicalizing the parent directory and then
 re-attaching the file name.
@@ -384,8 +387,8 @@ This repository does not claim to be a finished security system.
 
 Known MVP boundaries:
 
-- filesystem, network, and Monty session services are examples rather than a
-  complete service catalog
+- filesystem, network, and Monty session access domains are examples rather than a
+  complete access catalog
 - URL handling is intentionally simple
 - Monty OS support currently covers selected calls only
 - `ToolOutcome.classification` exists in the contract but is not enforced as an
@@ -393,4 +396,4 @@ Known MVP boundaries:
 - only tools are included in this kernel
 
 The design value is the separation between tool intent, semantic actions, policy
-decisions, effective authority, service execution, and audit.
+decisions, effective authority, authorized domain execution, and audit.

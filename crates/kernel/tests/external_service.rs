@@ -3,16 +3,19 @@ use mvp_contract::Capabilities;
 use mvp_kernel::action::{Action, ActionExecutor, AuditResource};
 use mvp_kernel::error::ExecutionError;
 use mvp_kernel::policy::{
-    Granted, KernelPolicyContext, KernelPolicyContextFactory, Policy, PolicyEngine, PolicyGrant,
-    PolicyPlane,
+    Granted, KernelPolicyContext, KernelPolicyContextFactory, Policy, PolicyDecision, PolicyEngine,
+    PolicyEvaluation, PolicyGrant, PolicyReport,
 };
 
-struct ExternalEchoService<'a> {
-    policy: &'a PolicyPlane<KernelPolicyContextFactory>,
+struct ExternalEchoService<'a, E> {
+    policy: &'a E,
     executor: &'a ExternalEchoExecutor,
 }
 
-impl ExternalEchoService<'_> {
+impl<E> ExternalEchoService<'_, E>
+where
+    E: PolicyEngine<KernelPolicyContextFactory>,
+{
     async fn echo(
         &self,
         ctx: &KernelPolicyContext<'_>,
@@ -28,6 +31,42 @@ impl ExternalEchoService<'_> {
             .map_err(ExecutionError::Authorization)?;
 
         granted.execute_with(self.executor).await
+    }
+}
+
+struct ExternalEchoPolicyEngine;
+
+#[async_trait]
+impl PolicyEngine<KernelPolicyContextFactory> for ExternalEchoPolicyEngine {
+    async fn decide<A: Action>(&self, ctx: &KernelPolicyContext<'_>, action: &A) -> PolicyReport {
+        let action_any = action as &dyn std::any::Any;
+        let Some(action) = action_any.downcast_ref::<ExternalEchoAction>() else {
+            return PolicyReport::deny_without_match(
+                Vec::new(),
+                Some("No matching policy.".to_owned()),
+            );
+        };
+
+        let policy = AllowExternalEcho;
+        let policy_grant = policy.grant(ctx, action).await;
+        let (decision, reason) = policy_grant.clone().into_decision_and_reason();
+        let evaluations = vec![PolicyEvaluation::new(
+            policy.name(),
+            1,
+            "action",
+            policy_grant,
+        )];
+
+        match decision {
+            PolicyDecision::Allow => PolicyReport::allow(evaluations, policy.name(), 1, reason),
+            PolicyDecision::Deny => {
+                PolicyReport::deny_from_policy(evaluations, policy.name(), 1, reason)
+            }
+            PolicyDecision::Abstain => PolicyReport::deny_without_match(
+                evaluations,
+                Some("No matching policy.".to_owned()),
+            ),
+        }
     }
 }
 
@@ -93,8 +132,7 @@ async fn external_crate_can_define_service_action_and_executor() {
     let root = std::fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
     let ctx = KernelPolicyContext::new(Capabilities::empty(), &root);
 
-    let mut policy = PolicyPlane::new();
-    policy.append::<ExternalEchoAction, _>(AllowExternalEcho);
+    let policy = ExternalEchoPolicyEngine;
 
     let executor = ExternalEchoExecutor;
     let service = ExternalEchoService {

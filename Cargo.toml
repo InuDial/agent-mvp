@@ -8,9 +8,9 @@ publish = false
 members = [
     "crates/contract",
     "crates/kernel",
-    "crates/service-fs",
-    "crates/service-monty",
-    "crates/service-network",
+    "crates/access-fs",
+    "crates/access-monty",
+    "crates/access-network",
     "crates/test-support",
     "crates/tool-builtin",
     "crates/app",
@@ -20,9 +20,9 @@ default-members = [
     ".",
     "crates/contract",
     "crates/kernel",
-    "crates/service-fs",
-    "crates/service-monty",
-    "crates/service-network",
+    "crates/access-fs",
+    "crates/access-monty",
+    "crates/access-network",
     "crates/test-support",
     "crates/tool-builtin",
     "crates/app",
@@ -44,9 +44,9 @@ opentelemetry_sdk = { version = "0.32", features = ["trace", "rt-tokio"] }
 bitflags = "2.13.0"
 mvp-contract = { path = "crates/contract" }
 mvp-kernel = { path = "crates/kernel" }
-mvp-service-fs = { path = "crates/service-fs" }
-mvp-service-monty = { path = "crates/service-monty" }
-mvp-service-network = { path = "crates/service-network" }
+mvp-access-fs = { path = "crates/access-fs" }
+mvp-access-monty = { path = "crates/access-monty" }
+mvp-access-network = { path = "crates/access-network" }
 mvp-test-support = { path = "crates/test-support" }
 mvp-tool-builtin = { path = "crates/tool-builtin" }
 mvp-app = { path = "crates/app" }
@@ -57,8 +57,8 @@ serde_json.workspace = true
 tokio.workspace = true
 mvp-contract.workspace = true
 mvp-kernel.workspace = true
-mvp-service-fs.workspace = true
-mvp-service-monty.workspace = true
+mvp-access-fs.workspace = true
+mvp-access-monty.workspace = true
 mvp-tool-builtin.workspace = true
 mvp-app.workspace = true
 mvp-tool-monty.workspace = true

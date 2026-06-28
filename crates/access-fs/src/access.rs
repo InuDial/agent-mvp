@@ -7,19 +7,19 @@ use mvp_kernel::tool::ToolContext;
 
 use crate::{CanonicalRoot, FsAction, FsBackend, FsReadAction, FsWriteAction, action};
 
-pub trait HasFsService<K>: ToolContext<K>
+pub trait HasFsAccess<K>: ToolContext<K>
 where
     K: FsBackend + Kernel,
 {
-    fn fs(&self) -> FsService<'_, K>;
+    fn fs(&self) -> FsAccess<'_, K>;
 }
 
-/// Filesystem service facade exposed as `ctx.fs()`.
+/// Filesystem access facade exposed as `ctx.fs()`.
 ///
 /// Public methods remain natural and function-like. Internally they follow the
 /// same pipeline: construct an action, ask policy to grant it, then execute the
 /// granted action. Grant / execute audit stays in the shared policy/action core.
-pub struct FsService<'a, K>
+pub struct FsAccess<'a, K>
 where
     K: Kernel + FsBackend + ?Sized,
 {
@@ -28,7 +28,7 @@ where
     policy_context: PolicyContextFor<'a, K>,
 }
 
-impl<'a, K> FsService<'a, K>
+impl<'a, K> FsAccess<'a, K>
 where
     K: Kernel + FsBackend,
 {
@@ -53,7 +53,7 @@ where
         let parent = FsAction::new(path);
         let granted = self
             .kernel
-            .policy_plane()
+            .policy_engine()
             .grant(&self.policy_context, parent)
             .await
             .map_err(ExecutionError::Authorization)?;
@@ -61,7 +61,7 @@ where
         let action = FsReadAction::new(granted);
         let granted = self
             .kernel
-            .policy_plane()
+            .policy_engine()
             .grant(&self.policy_context, action)
             .await
             .map_err(ExecutionError::Authorization)?;
@@ -77,7 +77,7 @@ where
         let parent = FsAction::new(path);
         let granted = self
             .kernel
-            .policy_plane()
+            .policy_engine()
             .grant(&self.policy_context, parent)
             .await
             .map_err(ExecutionError::Authorization)?;
@@ -85,7 +85,7 @@ where
         let action = FsWriteAction::new(granted, content.to_owned());
         let granted = self
             .kernel
-            .policy_plane()
+            .policy_engine()
             .grant(&self.policy_context, action)
             .await
             .map_err(ExecutionError::Authorization)?;

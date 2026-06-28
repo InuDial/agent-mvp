@@ -1,8 +1,9 @@
+pub mod access;
 pub mod action;
 pub mod backend;
 pub mod policy;
-pub mod service;
 
+pub use access::{FsAccess, HasFsAccess};
 pub use action::{
     CanonicalPath, CanonicalPrefix, CanonicalRoot, FsAction, FsReadAction, FsWriteAction,
 };
@@ -12,7 +13,6 @@ pub use policy::{
     AllowFileWritePrefixPolicy, AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy,
     AllowWorkspaceWritePolicy,
 };
-pub use service::{FsService, HasFsService};
 
 #[cfg(test)]
 mod tests;

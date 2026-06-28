@@ -27,17 +27,17 @@ pub(crate) trait ToolAdapter<K: Kernel>:
 /// capability sub-contexts such as `ctx.fs()` or `ctx.network()`, but it cannot
 /// implement the sealed runtime `ToolAdapter` trait directly.
 ///
-/// # Service-action-policy requirement
+/// # Access-action-policy requirement
 ///
 /// A `ToolImpl` must not perform authority-bearing effects directly. Filesystem,
 /// network, process, secret, scheduling, and similar effects must go through the
-/// kernel service facades exposed by the context, or through
+/// kernel access facades exposed by the context, or through
 /// [`ToolContext::invoke_tool`] for a nested tool call.
 ///
-/// Those service facades translate requests into typed actions, ask the policy
-/// plane for a grant, and execute only the granted action. Direct host APIs such
+/// Those access facades translate requests into typed actions, ask the policy
+/// engine for a grant, and execute only the granted action. Direct host APIs such
 /// as `std::fs`, sockets, subprocesses, environment reads, or ad-hoc global
-/// clients bypass that service-action-policy path and are not valid inside a
+/// clients bypass that access-action-policy path and are not valid inside a
 /// tool implementation unless the effect is demonstrably non-authority-bearing.
 #[async_trait]
 pub trait ToolImpl<K: Kernel>: Send + Sync + 'static {

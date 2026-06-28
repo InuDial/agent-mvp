@@ -9,8 +9,8 @@ The central rule is:
 tool code never performs side effects directly
 ```
 
-Instead, tools ask kernel-owned services to do work. Services translate requests
-into typed actions, the policy plane grants or denies those actions, and only a
+Instead, tools ask kernel-owned access facades to do work. Access facades translate requests
+into typed actions, the policy engine grants or denies those actions, and only a
 granted action can execute against the domain executor. Audit records describe
 the invocation, policy decision, and execution result.
 
@@ -21,9 +21,9 @@ Host
   -> Kernel::invoke
   -> ToolContext
   -> ToolImpl
-  -> Service facade
+  -> Access facade
   -> Action
-  -> PolicyPlane
+  -> PolicyEngine / PolicyPipeline
   -> Granted<Action>
   -> Executor
   -> Audit
@@ -32,9 +32,9 @@ Host
 The important part is the direction of control:
 
 - `ToolImpl` expresses intent.
-- A service facade owns side-effect translation.
+- An access facade owns side-effect translation.
 - `Action` is the unit policy understands.
-- `PolicyPlane` decides whether the action is granted.
+- `PolicyEngine::grant` creates a grant from the concrete engine's decision.
 - `Granted<Action>` is the only value that can execute.
 - The executor performs the domain operation.
 
@@ -51,19 +51,19 @@ Code:
 - `crates/kernel/src/tool/context.rs`
 - `crates/tool-builtin/src`
 
-### Service
+### Access
 
 Purpose:
 Keep tool logic separate from side-effect domains.
 
-A service facade exposes ergonomic methods such as `ctx.fs().read_file(...)`.
+An access facade exposes ergonomic methods such as `ctx.fs().read_file(...)`.
 Internally it resolves the request into one or more actions, asks policy for a
 grant, and executes only granted actions.
 
 Code:
-- `crates/service-fs/src/service.rs`
-- `crates/service-network/src/service.rs`
-- `crates/service-monty/src/service.rs`
+- `crates/access-fs/src/access.rs`
+- `crates/access-network/src/access.rs`
+- `crates/access-monty/src/access.rs`
 
 ### Action
 
@@ -75,16 +75,18 @@ Executors know how to run granted actions against their domain backend or store.
 
 Code:
 - `crates/kernel/src/action.rs`
-- `crates/service-fs/src/action.rs`
-- `crates/service-network/src/action.rs`
-- `crates/service-monty/src/action.rs`
+- `crates/access-fs/src/action.rs`
+- `crates/access-network/src/action.rs`
+- `crates/access-monty/src/action.rs`
 
 ### Policy
 
 Purpose:
-Separate authorization rules from tool and service code.
+Separate authorization rules from tool and access code.
 
-The policy plane evaluates actions in this order:
+The kernel defines the `PolicyEngine` trait. Its default `grant` implementation
+creates `Granted<Action>` values after the concrete engine returns a decision.
+The app's `PolicyPipeline` evaluates actions in this order:
 
 1. inbound global policies
 2. typed action-specific policies
@@ -95,19 +97,19 @@ The capability envelope is an inbound policy. Resource policies are typed
 policies.
 
 Code:
-- `crates/kernel/src/policy/plane.rs`
 - `crates/kernel/src/policy/traits.rs`
-- `crates/service-fs/src/policy.rs`
-- `crates/service-network/src/policy.rs`
-- `crates/service-monty/src/policy.rs`
+- `crates/app/src/policy_pipeline.rs`
+- `crates/access-fs/src/policy.rs`
+- `crates/access-network/src/policy.rs`
+- `crates/access-monty/src/policy.rs`
 
 ### Grant
 
 Purpose:
 Represent authorization as a value.
 
-Services cannot execute an action directly. They need `Granted<Action>`, which
-is created only by the policy plane. `GrantId` links grant audit records to
+Access facades cannot execute an action directly. They need `Granted<Action>`, which
+is created only by the kernel-owned grant path. `GrantId` links grant audit records to
 execution audit records.
 
 Code:
@@ -120,15 +122,15 @@ Keep domain side effects on backend or store objects, while actions remain
 policy-facing intent values.
 
 `ActionExecutor<A>` runs only a `Granted<A>`. `Granted<A>` keeps the shared audit
-wrapper around execution, so services can delegate to domain executors without
+wrapper around execution, so access facades can delegate to domain executors without
 letting ungranted actions run.
 
 Code:
 - `crates/kernel/src/action.rs`
 - `crates/kernel/src/policy/grant.rs`
-- `crates/service-fs/src/backend.rs`
-- `crates/service-network/src/backend.rs`
-- `crates/service-monty/src/store.rs`
+- `crates/access-fs/src/backend.rs`
+- `crates/access-network/src/backend.rs`
+- `crates/access-monty/src/store.rs`
 
 ### Audit
 
@@ -175,8 +177,8 @@ Write targets that do not exist are represented by canonicalizing their parent
 directory and then re-attaching the requested file name.
 
 Code:
-- `crates/service-fs/src/action.rs`
-- `crates/service-fs/src/policy.rs`
+- `crates/access-fs/src/action.rs`
+- `crates/access-fs/src/policy.rs`
 
 Tradeoff:
 This is still path-based authorization. It improves consistency and audit
@@ -195,12 +197,12 @@ Rules:
 - nested call without override inherits the parent envelope
 - nested override must stay within the parent envelope
 
-The `CapabilityEnvelopePolicy` denies actions whose required capabilities exceed
-the current effective envelope.
+The app's `CapabilityEnvelopePolicy` denies actions whose required capabilities
+exceed the current effective envelope.
 
 Code:
 - `crates/contract/src/lib.rs`
-- `crates/kernel/src/policy/plane.rs`
+- `crates/app/src/policy_pipeline.rs`
 - `crates/app/src/lib.rs`
 
 ## Where To Start Reading
@@ -209,14 +211,15 @@ Read in this order:
 
 1. `crates/kernel/src/action.rs`
 2. `crates/kernel/src/policy/decision.rs`
-3. `crates/kernel/src/policy/plane.rs`
+3. `crates/kernel/src/policy/traits.rs`
 4. `crates/kernel/src/policy/grant.rs`
-5. `crates/service-fs/src/service.rs`
-6. `crates/service-fs/src/action.rs`
-7. `crates/service-fs/src/policy.rs`
-8. `crates/service-network/src/service.rs`
-9. `crates/service-monty/src/service.rs`
-10. `crates/kernel/src/audit.rs`
-11. `crates/app/src/lib.rs`
-12. `crates/tool-builtin/src`
-13. `crates/tool-monty/src/lib.rs`
+5. `crates/app/src/policy_pipeline.rs`
+6. `crates/access-fs/src/access.rs`
+7. `crates/access-fs/src/action.rs`
+8. `crates/access-fs/src/policy.rs`
+9. `crates/access-network/src/access.rs`
+10. `crates/access-monty/src/access.rs`
+11. `crates/kernel/src/audit.rs`
+12. `crates/app/src/lib.rs`
+13. `crates/tool-builtin/src`
+14. `crates/tool-monty/src/lib.rs`

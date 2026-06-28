@@ -7,14 +7,14 @@ use monty::{
     DictPairs, ExcType, ExtFunctionResult, LimitedTracker, MontyException, MontyObject, MontyRepl,
     NameLookupResult, PrintWriter, ReplProgress, ResourceLimits,
 };
+use mvp_access_fs::{FsBackend, HasFsAccess};
+use mvp_access_monty::{HasMontySessionAccess, MontySessionStore};
 use mvp_contract::{Capabilities, OutputClassification, ToolOutcome, ToolSpec};
 use mvp_kernel::{
     error::{ExecutionError, InputError, ToolError},
     kernel::Kernel,
     tool::{ToolContext, ToolImpl},
 };
-use mvp_service_fs::{FsBackend, HasFsService};
-use mvp_service_monty::{HasMontySessionService, MontySessionStore};
 use serde_json::{Map, Number, Value, json};
 
 const DEFAULT_TOOL_NAME: &str = "monty";
@@ -244,7 +244,7 @@ impl MontyTool {
 impl<K> ToolImpl<K> for MontyTool
 where
     K: Kernel + MontySessionStore,
-    for<'a> K::ToolCx<'a>: HasMontySessionService<K>,
+    for<'a> K::ToolCx<'a>: HasMontySessionAccess<K>,
 {
     type Input = MontyInput;
     type Output = ToolOutcome;
@@ -312,7 +312,7 @@ where
 impl<K> ToolImpl<K> for MontyOsTool
 where
     K: Kernel + FsBackend,
-    for<'a> K::ToolCx<'a>: HasFsService<K>,
+    for<'a> K::ToolCx<'a>: HasFsAccess<K>,
 {
     type Input = MontyOsInput;
     type Output = ToolOutcome;
@@ -575,25 +575,23 @@ fn tool_error_to_monty(error: ToolError) -> MontyException {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mvp_access_fs::{
+        AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, CanonicalRoot, FsAccess, FsAction,
+        HasFsAccess, HasFsBackend, StdFsBackend,
+    };
+    use mvp_access_monty::{
+        AllowMontySessionPolicy, HasMontySessionAccess, HasMontySessionStore,
+        MemoryMontySessionStore, MontySessionAccess, MontySessionLoadAction,
+        MontySessionSaveAction,
+    };
     use mvp_contract::{Capability, InvocationParams};
     use mvp_kernel::{
         audit,
         error::AuthorizationError,
-        policy::{
-            CapabilityEnvelopePolicy, KernelPolicyContext, KernelPolicyContextFactory, PolicyPlane,
-        },
+        policy::{KernelPolicyContext, KernelPolicyContextFactory},
         tool::{RegisteredTool, ToolContext, ToolImpl, ToolRegistration},
     };
-    use mvp_service_fs::{
-        AllowWorkspaceFsPolicy, AllowWorkspaceReadPolicy, CanonicalRoot, FsAction, FsService,
-        HasFsBackend, HasFsService, StdFsBackend,
-    };
-    use mvp_service_monty::{
-        AllowMontySessionPolicy, HasMontySessionService, HasMontySessionStore,
-        MemoryMontySessionStore, MontySessionLoadAction, MontySessionSaveAction,
-        MontySessionService,
-    };
-    use mvp_test_support::TempWorkspace;
+    use mvp_test_support::{CapabilityEnvelopePolicy, TempWorkspace, TestPolicyPipeline};
     use std::collections::BTreeMap;
     use std::path::Path;
 
@@ -601,12 +599,12 @@ mod tests {
         tools: BTreeMap<String, RegisteredTool<TestKernel>>,
         fs: StdFsBackend,
         monty_sessions: MemoryMontySessionStore,
-        policy: PolicyPlane<KernelPolicyContextFactory>,
+        policy: TestPolicyPipeline<KernelPolicyContextFactory>,
     }
 
     impl TestKernel {
         fn new() -> Self {
-            let mut policy = PolicyPlane::new();
+            let mut policy = TestPolicyPipeline::new();
             policy.prepend_inbound(CapabilityEnvelopePolicy);
             policy.append::<FsAction, _>(AllowWorkspaceFsPolicy);
             policy.append::<MontySessionLoadAction, _>(AllowMontySessionPolicy);
@@ -751,23 +749,23 @@ mod tests {
         }
     }
 
-    impl HasFsService<TestKernel> for TestToolContext<'_> {
-        fn fs(&self) -> FsService<'_, TestKernel> {
-            FsService::new(self.kernel, self.workspace_root(), self.policy_context())
+    impl HasFsAccess<TestKernel> for TestToolContext<'_> {
+        fn fs(&self) -> FsAccess<'_, TestKernel> {
+            FsAccess::new(self.kernel, self.workspace_root(), self.policy_context())
         }
     }
 
-    impl HasMontySessionService<TestKernel> for TestToolContext<'_> {
-        fn monty_sessions(&self) -> MontySessionService<'_, TestKernel> {
-            MontySessionService::new(self.kernel, self.workspace_root(), self.policy_context())
+    impl HasMontySessionAccess<TestKernel> for TestToolContext<'_> {
+        fn monty_sessions(&self) -> MontySessionAccess<'_, TestKernel> {
+            MontySessionAccess::new(self.kernel, self.workspace_root(), self.policy_context())
         }
     }
 
     #[async_trait]
     impl Kernel for TestKernel {
         type PolicyCxFactory = KernelPolicyContextFactory;
-        type PolicyPlane<'a>
-            = PolicyPlane<KernelPolicyContextFactory>
+        type PolicyEngine<'a>
+            = TestPolicyPipeline<KernelPolicyContextFactory>
         where
             Self: 'a;
 
@@ -777,7 +775,7 @@ mod tests {
         where
             Self: 'a;
 
-        fn policy_plane(&self) -> &Self::PolicyPlane<'_> {
+        fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
             &self.policy
         }
 
