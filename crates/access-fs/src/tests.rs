@@ -89,7 +89,7 @@ impl ToolContext<TestKernel> for UnusedToolContext<'_> {
         _capabilities_override: Option<Capabilities>,
         _payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        panic!("unused in fs service tests")
+        panic!("unused in fs access tests")
     }
 }
 
@@ -159,7 +159,7 @@ impl ToolHost for TestKernel {
         _params: &InvocationParams,
         _payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        panic!("unused in fs service tests")
+        panic!("unused in fs access tests")
     }
 }
 
@@ -247,7 +247,7 @@ async fn workspace_policy_allows_reads_inside_workspace() {
 }
 
 #[tokio::test]
-async fn effective_capabilities_can_shrink_read_service_access() {
+async fn effective_capabilities_can_shrink_read_access() {
     let ws = TempWorkspace::new();
     std::fs::write(ws.root.join("hello.txt"), "hello").unwrap();
 
@@ -382,7 +382,7 @@ async fn workspace_policy_allows_writes_inside_workspace() {
 }
 
 #[tokio::test]
-async fn effective_capabilities_can_shrink_write_service_access() {
+async fn effective_capabilities_can_shrink_write_access() {
     let ws = TempWorkspace::new();
     std::fs::write(ws.root.join("hello.txt"), "hello").unwrap();
 

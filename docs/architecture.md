@@ -39,7 +39,7 @@ The important part is the direction of control:
 - The executor performs the domain operation.
 
 The crate ownership is intentionally split: `mvp-core` owns the generic
-`ToolHost` / `ToolContext` / `ToolImpl` API, `mvp-kernel` owns service runtime,
+`ToolHost` / `ToolContext` / `ToolImpl` API, `mvp-kernel` owns kernel runtime,
 policy pipeline, backends, and audit helpers, and `mvp-app` owns the concrete tool
 registry, invocation context, and nested invocation behavior.
 

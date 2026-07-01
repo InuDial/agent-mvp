@@ -60,7 +60,7 @@ If you want to jump straight into code, read in this order:
 ```text
 crates/contract   Shared protocol, metadata, capabilities, invocation params
 crates/core       Authorization traits, actions, policy engine, grants, tool host API
-crates/kernel     Service runtime, policy pipeline, audit, default backends
+crates/kernel     Kernel runtime, policy pipeline, audit, default backends
 crates/access-fs      Filesystem access facade, actions, backend, policies
 crates/access-network Network access facade, actions, backend, policies
 crates/access-monty   Monty session access, actions, store, policies
@@ -119,7 +119,7 @@ access-fs / access-network / access-monty
   concrete access facades, actions, backends or stores, resource policies
 
 kernel
-  service runtime, policy pipeline, policy context, audit, default backends
+  kernel runtime, policy pipeline, policy context, audit, default backends
 
 core
   action traits, policy traits, policy context traits, tool host API, unforgeable grants
@@ -131,8 +131,8 @@ contract
 The implementation layout is about code ownership and dependency direction.
 `contract` is the lowest shared data layer. `core` owns the authorization model,
 the generic tool host API, and the unforgeable `Granted<Action>` token. Access
-crates define side-effect domains over that model. `kernel` assembles services,
-policy pipeline, access backends, and audit. `app` owns the concrete tool
+crates define side-effect domains over that model. `kernel` assembles runtime
+state, policy pipeline, access backends, and audit. `app` owns the concrete tool
 registry, invocation context, nested invocation, and app-level policy
 configuration. `examples/demo/` composes the pieces.
 
@@ -166,7 +166,7 @@ turns an allow report into `Granted<Action>`.
 
 ### `kernel`
 
-`mvp-kernel` defines the service runtime model:
+`mvp-kernel` defines the kernel runtime model:
 
 - `PolicyPipeline`
 - `CapabilityEnvelopePolicy`
@@ -176,7 +176,7 @@ turns an allow report into `Granted<Action>`.
 
 The kernel crate does not re-export core or contract types. Public paths stay
 unique: authorization traits come from `mvp-core`, report/data types from
-`mvp-contract`, service runtime assembly from `mvp-kernel`, and concrete tool
+`mvp-contract`, kernel runtime assembly from `mvp-kernel`, and concrete tool
 hosting from `mvp-app`.
 
 ### `access-*`

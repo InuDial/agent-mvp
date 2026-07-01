@@ -89,7 +89,7 @@ impl ToolContext<TestKernel> for UnusedToolContext<'_> {
         _capabilities_override: Option<Capabilities>,
         _payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        panic!("unused in network service tests")
+        panic!("unused in network access tests")
     }
 }
 
@@ -155,7 +155,7 @@ impl ToolHost for TestKernel {
         _params: &InvocationParams,
         _payload: Value,
     ) -> Result<ToolOutcome, ToolError> {
-        panic!("unused in network service tests")
+        panic!("unused in network access tests")
     }
 }
 

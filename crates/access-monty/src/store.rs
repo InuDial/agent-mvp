@@ -232,7 +232,7 @@ mod tests {
         }
     }
 
-    fn service<'a>(
+    fn access<'a>(
         kernel: &'a TestKernel,
         workspace_root: &'a Path,
     ) -> MontySessionAccess<'a, TestKernel> {
@@ -247,12 +247,12 @@ mod tests {
     async fn memory_store_round_trips_session_bytes_through_action_pipeline() {
         let kernel = TestKernel::new();
         let workspace = PathBuf::from("/tmp/workspace-a");
-        let service = service(&kernel, &workspace);
+        let access = access(&kernel, &workspace);
 
-        service.save("default", b"state".to_vec()).await.unwrap();
+        access.save("default", b"state".to_vec()).await.unwrap();
 
         assert_eq!(
-            service.load("default").await.unwrap(),
+            access.load("default").await.unwrap(),
             Some(b"state".to_vec())
         );
     }
@@ -262,8 +262,8 @@ mod tests {
         let kernel = TestKernel::new();
         let workspace_a_root = PathBuf::from("/tmp/workspace-a");
         let workspace_b_root = PathBuf::from("/tmp/workspace-b");
-        let workspace_a = service(&kernel, &workspace_a_root);
-        let workspace_b = service(&kernel, &workspace_b_root);
+        let workspace_a = access(&kernel, &workspace_a_root);
+        let workspace_b = access(&kernel, &workspace_b_root);
 
         workspace_a.save("default", b"a".to_vec()).await.unwrap();
 

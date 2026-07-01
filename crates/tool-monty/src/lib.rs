@@ -319,7 +319,7 @@ where
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: DEFAULT_OS_TOOL_NAME.into(),
-            description: "Handle Monty OS calls through SAP services.".into(),
+            description: "Handle Monty OS calls through access facades.".into(),
             capabilities: Capabilities::empty(),
         }
     }
@@ -910,7 +910,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn monty_os_call_invokes_os_tool_through_fs_service() {
+    async fn monty_os_call_invokes_os_tool_through_fs_access() {
         let ws = TempWorkspace::with_prefix("monty-os-read-text");
         std::fs::write(ws.root.join("hello.txt"), "hello through os call").unwrap();
 

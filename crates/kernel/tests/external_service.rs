@@ -7,12 +7,12 @@ use mvp_core::error::ExecutionError;
 use mvp_core::policy::{Granted, Policy, PolicyEngine};
 use mvp_kernel::policy::{KernelPolicyContext, KernelPolicyContextFactory};
 
-struct ExternalEchoService<'a, E> {
+struct ExternalEchoAccess<'a, E> {
     policy: &'a E,
     executor: &'a ExternalEchoExecutor,
 }
 
-impl<E> ExternalEchoService<'_, E>
+impl<E> ExternalEchoAccess<'_, E>
 where
     E: PolicyEngine<KernelPolicyContextFactory>,
 {
@@ -128,19 +128,19 @@ impl Policy<KernelPolicyContextFactory, ExternalEchoAction> for AllowExternalEch
 }
 
 #[tokio::test]
-async fn external_crate_can_define_service_action_and_executor() {
+async fn external_crate_can_define_access_action_and_executor() {
     let root = std::fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
     let ctx = KernelPolicyContext::new(Capabilities::empty(), &root);
 
     let policy = ExternalEchoPolicyEngine;
 
     let executor = ExternalEchoExecutor;
-    let service = ExternalEchoService {
+    let access = ExternalEchoAccess {
         policy: &policy,
         executor: &executor,
     };
 
-    let output = service.echo(&ctx, "hello").await.unwrap();
+    let output = access.echo(&ctx, "hello").await.unwrap();
 
     assert_eq!(output, "external:hello");
 }

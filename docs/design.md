@@ -28,7 +28,7 @@ Use this file when you see a type or pattern and want to know why it exists.
 | `CanonicalRoot` | Keeps workspace containment checks on canonical roots. | `crates/access-fs/src/action.rs`, `crates/kernel/src/policy/context.rs` |
 | `CanonicalPrefix` | Keeps prefix policies in the same canonical path space as actions. | `crates/access-fs/src/action.rs`, `crates/access-fs/src/policy.rs` |
 | `FsAction` parent action | Authorizes and audits shared fs path resolution before read/write-specific actions. | `crates/access-fs/src/action.rs`, `crates/access-fs/src/access.rs` |
-| Monty session actions | Persist Monty REPL state through the same policy, grant, and audit flow as other services. | `crates/access-monty/src/action.rs`, `crates/access-monty/src/access.rs`, `crates/access-monty/src/store.rs` |
+| Monty session actions | Persist Monty REPL state through the same policy, grant, and audit flow as other access domains. | `crates/access-monty/src/action.rs`, `crates/access-monty/src/access.rs`, `crates/access-monty/src/store.rs` |
 | `MontyTool` | Runs Monty code while routing exposed host tool calls back through nested tool invocation. | `crates/tool-monty/src/lib.rs` |
 | `MontyOsTool` | Handles supported Monty OS calls by delegating to access facades such as `ctx.fs()`. | `crates/tool-monty/src/lib.rs` |
 | Nested capability inheritance | Prevents delegated tool calls from expanding authority. | `crates/app/src/lib.rs`, `crates/test-support/src/lib.rs` |
