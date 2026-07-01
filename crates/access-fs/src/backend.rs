@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 
-use mvp_core::action::ActionExecutor;
 use mvp_core::error::{CapabilityError, ExecutionError};
 use mvp_core::policy::Granted;
 
@@ -8,12 +7,8 @@ use super::action::{CanonicalPath, FsReadAction, FsWriteAction};
 
 #[async_trait]
 pub trait FsBackend: Send + Sync {
-    async fn read_canonical(&self, path: &CanonicalPath) -> Result<String, CapabilityError>;
-    async fn write_canonical(
-        &self,
-        path: &CanonicalPath,
-        content: &str,
-    ) -> Result<(), CapabilityError>;
+    async fn read_file(&self, granted: Granted<FsReadAction>) -> Result<String, ExecutionError>;
+    async fn write_file(&self, granted: Granted<FsWriteAction>) -> Result<(), ExecutionError>;
 }
 
 pub trait HasFsBackend: Send + Sync {
@@ -27,16 +22,12 @@ impl<T> FsBackend for T
 where
     T: HasFsBackend,
 {
-    async fn read_canonical(&self, path: &CanonicalPath) -> Result<String, CapabilityError> {
-        self.fs_backend().read_canonical(path).await
+    async fn read_file(&self, granted: Granted<FsReadAction>) -> Result<String, ExecutionError> {
+        self.fs_backend().read_file(granted).await
     }
 
-    async fn write_canonical(
-        &self,
-        path: &CanonicalPath,
-        content: &str,
-    ) -> Result<(), CapabilityError> {
-        self.fs_backend().write_canonical(path, content).await
+    async fn write_file(&self, granted: Granted<FsWriteAction>) -> Result<(), ExecutionError> {
+        self.fs_backend().write_file(granted).await
     }
 }
 
@@ -49,8 +40,7 @@ impl StdFsBackend {
     }
 }
 
-#[async_trait]
-impl FsBackend for StdFsBackend {
+impl StdFsBackend {
     async fn read_canonical(&self, path: &CanonicalPath) -> Result<String, CapabilityError> {
         tokio::fs::read_to_string(path.as_path())
             .await
@@ -69,28 +59,17 @@ impl FsBackend for StdFsBackend {
 }
 
 #[async_trait]
-impl ActionExecutor<FsReadAction> for dyn FsBackend + '_ {
-    type Output = String;
-
-    async fn execute(
-        &self,
-        granted: Granted<FsReadAction>,
-    ) -> Result<Self::Output, ExecutionError> {
-        self.read_canonical(&granted.action().path)
+impl FsBackend for StdFsBackend {
+    async fn read_file(&self, granted: Granted<FsReadAction>) -> Result<String, ExecutionError> {
+        let action = granted.into_action();
+        self.read_canonical(&action.path)
             .await
             .map_err(ExecutionError::Capability)
     }
-}
 
-#[async_trait]
-impl ActionExecutor<FsWriteAction> for dyn FsBackend + '_ {
-    type Output = ();
-
-    async fn execute(
-        &self,
-        granted: Granted<FsWriteAction>,
-    ) -> Result<Self::Output, ExecutionError> {
-        self.write_canonical(&granted.action().path, &granted.action().content)
+    async fn write_file(&self, granted: Granted<FsWriteAction>) -> Result<(), ExecutionError> {
+        let action = granted.into_action();
+        self.write_canonical(&action.path, &action.content)
             .await
             .map_err(ExecutionError::Capability)
     }

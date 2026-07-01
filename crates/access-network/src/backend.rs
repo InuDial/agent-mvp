@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 
-use mvp_core::action::ActionExecutor;
 use mvp_core::error::{CapabilityError, ExecutionError};
 use mvp_core::policy::Granted;
 
@@ -8,7 +7,10 @@ use super::action::NetworkFetchAction;
 
 #[async_trait]
 pub trait NetworkBackend: Send + Sync {
-    async fn fetch_url(&self, url: &str) -> Result<Vec<u8>, CapabilityError>;
+    async fn fetch_url(
+        &self,
+        granted: Granted<NetworkFetchAction>,
+    ) -> Result<Vec<u8>, ExecutionError>;
 }
 
 pub trait HasNetworkBackend: Send + Sync {
@@ -22,8 +24,11 @@ impl<T> NetworkBackend for T
 where
     T: HasNetworkBackend,
 {
-    async fn fetch_url(&self, url: &str) -> Result<Vec<u8>, CapabilityError> {
-        self.network_backend().fetch_url(url).await
+    async fn fetch_url(
+        &self,
+        granted: Granted<NetworkFetchAction>,
+    ) -> Result<Vec<u8>, ExecutionError> {
+        self.network_backend().fetch_url(granted).await
     }
 }
 
@@ -31,8 +36,11 @@ pub struct DenyNetworkBackend;
 
 #[async_trait]
 impl NetworkBackend for DenyNetworkBackend {
-    async fn fetch_url(&self, _url: &str) -> Result<Vec<u8>, CapabilityError> {
-        Err(CapabilityError::Denied)
+    async fn fetch_url(
+        &self,
+        _granted: Granted<NetworkFetchAction>,
+    ) -> Result<Vec<u8>, ExecutionError> {
+        Err(ExecutionError::Capability(CapabilityError::Denied))
     }
 }
 
@@ -48,9 +56,8 @@ impl StaticNetworkBackend {
     }
 }
 
-#[async_trait]
-impl NetworkBackend for StaticNetworkBackend {
-    async fn fetch_url(&self, url: &str) -> Result<Vec<u8>, CapabilityError> {
+impl StaticNetworkBackend {
+    fn fetch_raw(&self, url: &str) -> Result<Vec<u8>, CapabilityError> {
         self.responses
             .get(url)
             .cloned()
@@ -59,15 +66,13 @@ impl NetworkBackend for StaticNetworkBackend {
 }
 
 #[async_trait]
-impl ActionExecutor<NetworkFetchAction> for dyn NetworkBackend + '_ {
-    type Output = Vec<u8>;
-
-    async fn execute(
+impl NetworkBackend for StaticNetworkBackend {
+    async fn fetch_url(
         &self,
         granted: Granted<NetworkFetchAction>,
-    ) -> Result<Self::Output, ExecutionError> {
-        self.fetch_url(&granted.action().url)
-            .await
+    ) -> Result<Vec<u8>, ExecutionError> {
+        let action = granted.into_action();
+        self.fetch_raw(&action.url)
             .map_err(ExecutionError::Capability)
     }
 }

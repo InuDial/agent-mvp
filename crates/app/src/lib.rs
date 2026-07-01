@@ -6,9 +6,8 @@ use mvp_access_monty::{HasMontySessionAccess, HasMontySessionStore, MontySession
 use mvp_access_network::{HasNetworkAccess, HasNetworkBackend, NetworkAccess};
 use mvp_contract::{Capabilities, InvocationParams, ToolOutcome};
 use mvp_core::{
-    action::{Action, ActionExecutor},
-    error::{AuthorizationError, ExecutionError, InputError, ToolError},
-    policy::{Granted, HasPolicyEngine},
+    error::{AuthorizationError, InputError, ToolError},
+    policy::HasPolicyEngine,
     tool::{RegisteredTool, ToolContext, ToolHost, ToolImpl, ToolRegistration},
 };
 use mvp_kernel::{
@@ -112,19 +111,6 @@ impl HasPolicyEngine for App {
 
     fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
         self.kernel.policy_engine()
-    }
-
-    async fn execute_granted<A, E>(
-        &self,
-        granted: Granted<A>,
-        executor: &E,
-    ) -> Result<E::Output, ExecutionError>
-    where
-        Self: Sized,
-        A: Action,
-        E: ActionExecutor<A> + ?Sized,
-    {
-        self.kernel.execute_granted(granted, executor).await
     }
 }
 

@@ -12,7 +12,7 @@ tool code never performs side effects directly
 Instead, tools ask controlled access facades to do work. Access facades translate requests
 into typed actions, the policy engine grants or denies those actions, and only a
 granted action can execute against the domain executor. Audit records describe
-the invocation, policy decision, and execution result.
+the invocation and policy decision.
 
 ## Runtime Flow
 
@@ -114,8 +114,7 @@ Purpose:
 Represent authorization as a value.
 
 Access facades cannot execute an action directly. They need `Granted<Action>`, which
-is created only by the core-owned grant path. `GrantId` links grant audit records to
-execution audit records.
+is created only by the core-owned grant path. `GrantId` identifies final allow records.
 
 Code:
 - `crates/core/src/policy/grant.rs`
@@ -126,12 +125,13 @@ Purpose:
 Keep domain side effects on backend or store objects, while actions remain
 policy-facing intent values.
 
-`ActionExecutor<A>` runs only a `Granted<A>`. `Granted<A>` keeps the shared audit
-boundary around execution, so access facades can delegate to domain executors without
-letting ungranted actions run. Concrete runtimes can wrap this path with audit.
+Backend and store traits accept only concrete `Granted<Action>` values for
+side-effecting methods. This keeps the shared audit boundary around execution,
+so access facades can delegate to domain executors without letting ungranted
+actions run. Concrete runtimes wrap this path with audit before moving the grant
+into the backend or store.
 
 Code:
-- `crates/core/src/action.rs`
 - `crates/core/src/policy/grant.rs`
 - `crates/access-fs/src/backend.rs`
 - `crates/access-network/src/backend.rs`
@@ -142,13 +142,11 @@ Code:
 Purpose:
 Make decisions inspectable.
 
-Final grant decisions and execution records are `INFO`. Per-policy evaluation
-records are `DEBUG` because they are diagnostic detail rather than the final
-authorization fact.
+Final grant decisions are `INFO`. Per-policy evaluation records are `DEBUG`
+because they are diagnostic detail rather than the final authorization fact.
 
 Audit events use stable dot-separated names such as `grant.allow`,
-`grant.deny`, `policy.evaluate`, `execute.start`, `execute.finish`, and
-`execute.error`. Optional values are emitted only when present, so JSON and OTel
+`grant.deny`, and `policy.evaluate`. Optional values are emitted only when present, so JSON and OTel
 consumers do not need to parse `Some(...)` / `None` debug strings or filter
 empty sentinel values.
 

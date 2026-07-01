@@ -44,7 +44,6 @@ where
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        let executor: &dyn NetworkBackend = self.kernel;
-        self.kernel.execute_granted(granted, executor).await
+        self.kernel.fetch_url(granted).await
     }
 }

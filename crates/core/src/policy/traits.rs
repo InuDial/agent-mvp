@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use mvp_contract::{GrantRecord, GrantSource, PolicyGrant, PolicyOutcome, PolicyReport};
 
 use crate::{
-    action::{Action, ActionExecutor},
-    error::{AuthorizationError, ExecutionError},
+    action::Action,
+    error::AuthorizationError,
     policy::{Granted, PolicyContextFactory},
 };
 
@@ -106,20 +106,6 @@ pub trait HasPolicyEngine: Sync {
         Self: 'a;
 
     fn policy_engine(&self) -> &Self::PolicyEngine<'_>;
-
-    /// execute a Granted<Action> with audit
-    async fn execute_granted<A, E>(
-        &self,
-        granted: Granted<A>,
-        executor: &E,
-    ) -> Result<E::Output, ExecutionError>
-    where
-        Self: Sized,
-        A: Action,
-        E: ActionExecutor<A> + ?Sized,
-    {
-        granted.execute_with(executor).await
-    }
 }
 
 static NEXT_GRANT_ID: AtomicU64 = AtomicU64::new(1);

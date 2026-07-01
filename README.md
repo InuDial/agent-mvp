@@ -81,7 +81,7 @@ flowchart TD
     Tool -->|access call| Access[Access facade]
     Access -->|Action| Policy[PolicyEngine / PolicyPipeline]
     Policy -->|Granted<Action>| Access
-    Access -->|authorized domain operation| Executor[Backend / store executor]
+    Access -->|Granted<Action>| Executor[Backend / store]
     Invocation -->|invocation events| Audit[Audit sink]
     Policy -->|grant decisions| Audit
     Executor -->|execution result / error| Audit
@@ -100,8 +100,8 @@ The logical architecture is about runtime responsibility:
   executes only after policy returns a grant.
 - **Policy engine** decides whether an action is denied or returned as
   `Granted<Action>` by the core-owned grant path.
-- **Executor** performs the authorized domain operation.
-- **Audit** records invocation events, grant decisions, and execution results.
+- **Executor** performs the authorized domain operation from a granted action.
+- **Audit** records invocation events and grant decisions.
 
 ## Implementation layers
 
@@ -153,7 +153,7 @@ boundary.
 
 `mvp-core` defines the authorization and generic tool surface:
 
-- `Action` and `ActionExecutor`
+- `Action`
 - `Policy`, `PolicyAny`, and `PolicyEngine`
 - `PolicyContext`, `PolicyContextFactory`, and `WorkspacePolicyContext`
 - `ToolHost`, `ToolContext`, `ToolImpl`, `ToolRegistration`, and `RegisteredTool`
@@ -190,9 +190,9 @@ Access crates define concrete side-effect domains:
 - `mvp-access-monty` owns Monty session load/save actions, session access facade,
   session store traits, and session policies.
 
-Each access crate uses `mvp-core` for `Action`, `PolicyEngine`,
-`Granted<Action>`, and `ActionExecutor`. Actions carry policy and audit metadata;
-backend or store executors own domain execution.
+Each access crate uses `mvp-core` for `Action`, `PolicyEngine`, and
+`Granted<Action>`. Actions carry policy and audit metadata; backend or store
+traits consume granted actions for domain execution.
 
 ### `app`
 
@@ -242,7 +242,7 @@ A top-level call enters through `App::invoke`:
 5. Access calls create explicit actions such as `fs.read` or `network.fetch`.
 6. The policy engine evaluates the action.
 7. A granted action executes through the backend or store.
-8. Audit records describe the invocation, grant decision, and execution result.
+8. Audit records describe the invocation and grant decision.
 
 Nested calls use the same path through `ToolContext::invoke_tool`. By default,
 the child inherits the parent invocation's effective capabilities. A child call
@@ -299,9 +299,9 @@ Each policy returns a `PolicyGrant` containing:
 
 This keeps policy-specific explanations with the policy while leaving emission,
 `Granted<Action>` construction, and final grant handling centralized in
-`PolicyEngine::grant` inside `mvp-core`. `mvp-kernel` records policy and
-execution audit through its pipeline/runtime; `mvp-app` records invocation and
-nested-call audit at the tool-host boundary.
+`PolicyEngine::grant` inside `mvp-core`. `mvp-kernel` records policy audit
+through its pipeline; `mvp-app` records invocation and nested-call audit at the
+tool-host boundary.
 
 ## Access model
 
@@ -314,7 +314,7 @@ Current domains:
 - Monty session load/save
 
 The facade constructs an action, asks policy for a grant, and only then delegates
-the granted action to a backend or store executor. This keeps tool logic,
+the granted action to a backend or store. This keeps tool logic,
 authorization, audit, and domain I/O in separate layers.
 
 Backends perform direct domain operations. Tools receive access facades such as
@@ -343,16 +343,14 @@ Audit records are emitted around:
 - attempted nested capability expansion
 - per-policy evaluation diagnostics at DEBUG level
 - grant allow/deny decisions
-- action execution start, finish, and error
 
 The audit layer is deliberately verbose for an MVP because the architecture is
 meant to make authorization decisions inspectable.
 
 Audit events use stable dot-separated names such as `grant.allow`,
-`grant.deny`, `policy.evaluate`, `execute.start`, `execute.finish`, and
-`execute.error`. They include query-friendly fields such as `phase`, `action`,
-`grant_id`, `resource_kind`, `resource`, `policy_name`, and `reason`. Optional
-fields are omitted when absent.
+`grant.deny`, and `policy.evaluate`. They include query-friendly fields such as
+`phase`, `action`, `grant_id`, `resource_kind`, `resource`, `policy_name`, and
+`reason`. Optional fields are omitted when absent.
 
 Final authorization records such as `grant.allow` and `grant.deny` are INFO.
 Per-policy `policy.evaluate` records are DEBUG because they explain the

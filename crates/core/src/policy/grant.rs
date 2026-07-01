@@ -1,4 +1,3 @@
-use crate::{action::Action, error::ExecutionError};
 use mvp_contract::{GrantId, GrantRecord};
 
 pub struct Granted<A> {
@@ -27,17 +26,5 @@ impl<A> Granted<A> {
 
     pub fn into_action(self) -> A {
         self.action
-    }
-}
-
-impl<A> Granted<A>
-where
-    A: Action,
-{
-    pub async fn execute_with<E>(self, executor: &E) -> Result<E::Output, ExecutionError>
-    where
-        E: crate::action::ActionExecutor<A> + ?Sized,
-    {
-        executor.execute(self).await
     }
 }

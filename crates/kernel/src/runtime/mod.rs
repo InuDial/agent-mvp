@@ -2,17 +2,9 @@ use async_trait::async_trait;
 use mvp_access_fs::{HasFsBackend, StdFsBackend};
 use mvp_access_monty::{HasMontySessionStore, MemoryMontySessionStore};
 use mvp_access_network::{DenyNetworkBackend, HasNetworkBackend};
-use mvp_core::{
-    action::{Action, ActionExecutor},
-    error::ExecutionError,
-    policy::{Granted, HasPolicyEngine},
-};
-use tracing::Instrument;
+use mvp_core::policy::HasPolicyEngine;
 
-use crate::{
-    audit,
-    policy::{CapabilityEnvelopePolicy, KernelPolicyContextFactory, PolicyPipeline},
-};
+use crate::policy::{CapabilityEnvelopePolicy, KernelPolicyContextFactory, PolicyPipeline};
 
 pub struct KernelRuntime {
     fs: StdFsBackend,
@@ -75,33 +67,5 @@ impl HasPolicyEngine for KernelRuntime {
 
     fn policy_engine(&self) -> &Self::PolicyEngine<'_> {
         &self.policy
-    }
-
-    async fn execute_granted<A, E>(
-        &self,
-        granted: Granted<A>,
-        executor: &E,
-    ) -> Result<E::Output, ExecutionError>
-    where
-        Self: Sized,
-        A: Action,
-        E: ActionExecutor<A> + ?Sized,
-    {
-        let action_kind = granted.action().audit_kind();
-        let resource = granted.action().audit_resource();
-        let grant_id = granted.grant_id();
-        let span = crate::action_execute_span!(action_kind, grant_id, &resource);
-
-        async move {
-            audit::execute_start(action_kind, grant_id, &resource);
-            let result = granted.execute_with(executor).await;
-            match &result {
-                Ok(_) => audit::execute_finish(action_kind, grant_id, &resource),
-                Err(error) => audit::execute_error(action_kind, grant_id, &resource, error),
-            }
-            result
-        }
-        .instrument(span)
-        .await
     }
 }

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use mvp_contract::{
     AuditResource, Capabilities, PolicyDecision, PolicyEvaluation, PolicyGrant, PolicyReport,
 };
-use mvp_core::action::{Action, ActionExecutor};
+use mvp_core::action::Action;
 use mvp_core::error::ExecutionError;
 use mvp_core::policy::{Granted, Policy, PolicyEngine};
 use mvp_kernel::policy::{KernelPolicyContext, KernelPolicyContextFactory};
@@ -30,7 +30,7 @@ where
             .await
             .map_err(ExecutionError::Authorization)?;
 
-        granted.execute_with(self.executor).await
+        self.executor.execute(granted)
     }
 }
 
@@ -96,14 +96,8 @@ impl ExternalEchoExecutor {
     }
 }
 
-#[async_trait]
-impl ActionExecutor<ExternalEchoAction> for ExternalEchoExecutor {
-    type Output = String;
-
-    async fn execute(
-        &self,
-        granted: Granted<ExternalEchoAction>,
-    ) -> Result<Self::Output, ExecutionError> {
+impl ExternalEchoExecutor {
+    fn execute(&self, granted: Granted<ExternalEchoAction>) -> Result<String, ExecutionError> {
         let action = granted.into_action();
         Ok(self.echo(&action.value))
     }
@@ -128,7 +122,7 @@ impl Policy<KernelPolicyContextFactory, ExternalEchoAction> for AllowExternalEch
 }
 
 #[tokio::test]
-async fn external_crate_can_define_access_action_and_executor() {
+async fn external_crate_can_define_access_and_consume_granted_action() {
     let root = std::fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
     let ctx = KernelPolicyContext::new(Capabilities::empty(), &root);
 

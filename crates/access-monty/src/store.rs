@@ -4,8 +4,6 @@ use std::{
     sync::Mutex,
 };
 
-use async_trait::async_trait;
-use mvp_core::action::ActionExecutor;
 use mvp_core::error::ExecutionError;
 use mvp_core::policy::Granted;
 
@@ -13,8 +11,11 @@ use crate::{MontySessionLoadAction, MontySessionSaveAction};
 
 /// ToolHost-side storage for serialized Monty REPL sessions.
 pub trait MontySessionStore: Send + Sync {
-    fn load(&self, key: &MontySessionKey) -> Result<Option<Vec<u8>>, ExecutionError>;
-    fn save(&self, key: MontySessionKey, bytes: Vec<u8>) -> Result<(), ExecutionError>;
+    fn load(
+        &self,
+        granted: Granted<MontySessionLoadAction>,
+    ) -> Result<Option<Vec<u8>>, ExecutionError>;
+    fn save(&self, granted: Granted<MontySessionSaveAction>) -> Result<(), ExecutionError>;
 }
 
 /// ToolHost extension for implementations that own Monty session storage.
@@ -28,38 +29,15 @@ impl<T> MontySessionStore for T
 where
     T: HasMontySessionStore,
 {
-    fn load(&self, key: &MontySessionKey) -> Result<Option<Vec<u8>>, ExecutionError> {
-        self.monty_session_store().load(key)
-    }
-
-    fn save(&self, key: MontySessionKey, bytes: Vec<u8>) -> Result<(), ExecutionError> {
-        self.monty_session_store().save(key, bytes)
-    }
-}
-
-#[async_trait]
-impl ActionExecutor<MontySessionLoadAction> for dyn MontySessionStore + '_ {
-    type Output = Option<Vec<u8>>;
-
-    async fn execute(
+    fn load(
         &self,
         granted: Granted<MontySessionLoadAction>,
-    ) -> Result<Self::Output, ExecutionError> {
-        let action = granted.into_action();
-        self.load(&action.key)
+    ) -> Result<Option<Vec<u8>>, ExecutionError> {
+        self.monty_session_store().load(granted)
     }
-}
 
-#[async_trait]
-impl ActionExecutor<MontySessionSaveAction> for dyn MontySessionStore + '_ {
-    type Output = ();
-
-    async fn execute(
-        &self,
-        granted: Granted<MontySessionSaveAction>,
-    ) -> Result<Self::Output, ExecutionError> {
-        let action = granted.into_action();
-        self.save(action.key, action.bytes)
+    fn save(&self, granted: Granted<MontySessionSaveAction>) -> Result<(), ExecutionError> {
+        self.monty_session_store().save(granted)
     }
 }
 
@@ -93,10 +71,8 @@ impl MemoryMontySessionStore {
     pub fn new() -> Self {
         Self::default()
     }
-}
 
-impl MontySessionStore for MemoryMontySessionStore {
-    fn load(&self, key: &MontySessionKey) -> Result<Option<Vec<u8>>, ExecutionError> {
+    fn load_raw(&self, key: &MontySessionKey) -> Result<Option<Vec<u8>>, ExecutionError> {
         let sessions = self
             .sessions
             .lock()
@@ -104,13 +80,28 @@ impl MontySessionStore for MemoryMontySessionStore {
         Ok(sessions.get(key).cloned())
     }
 
-    fn save(&self, key: MontySessionKey, bytes: Vec<u8>) -> Result<(), ExecutionError> {
+    fn save_raw(&self, key: MontySessionKey, bytes: Vec<u8>) -> Result<(), ExecutionError> {
         let mut sessions = self
             .sessions
             .lock()
             .map_err(|err| ExecutionError::Other(format!("Monty session store poisoned: {err}")))?;
         sessions.insert(key, bytes);
         Ok(())
+    }
+}
+
+impl MontySessionStore for MemoryMontySessionStore {
+    fn load(
+        &self,
+        granted: Granted<MontySessionLoadAction>,
+    ) -> Result<Option<Vec<u8>>, ExecutionError> {
+        let action = granted.into_action();
+        self.load_raw(&action.key)
+    }
+
+    fn save(&self, granted: Granted<MontySessionSaveAction>) -> Result<(), ExecutionError> {
+        let action = granted.into_action();
+        self.save_raw(action.key, action.bytes)
     }
 }
 

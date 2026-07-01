@@ -1,9 +1,6 @@
 use std::any::Any;
 
-use async_trait::async_trait;
 use mvp_contract::{AuditResource, Capabilities};
-
-use crate::{error::ExecutionError, policy::Granted};
 
 /// A primitive authority-bearing action.
 ///
@@ -20,15 +17,4 @@ pub trait Action: Any + Send + Sync {
     fn audit_resource(&self) -> AuditResource {
         AuditResource::None
     }
-}
-
-/// Executor for a granted domain action.
-#[async_trait]
-pub trait ActionExecutor<A>: Send + Sync
-where
-    A: Action,
-{
-    type Output;
-
-    async fn execute(&self, granted: Granted<A>) -> Result<Self::Output, ExecutionError>;
 }

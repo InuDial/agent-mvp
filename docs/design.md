@@ -10,7 +10,7 @@ Use this file when you see a type or pattern and want to know why it exists.
 | Access facade | Converts ergonomic tool calls into auditable actions. | `crates/access-fs/src/access.rs`, `crates/access-network/src/access.rs`, `crates/access-monty/src/access.rs` |
 | Backend / store | Performs direct domain operations after an access facade has obtained a grant. | `crates/access-fs/src/backend.rs`, `crates/access-network/src/backend.rs`, `crates/access-monty/src/store.rs` |
 | `Action` | Makes side-effect intent explicit for policy and audit. | `crates/core/src/action.rs` |
-| `ActionExecutor` | Keeps execution on backend/store objects while preserving a shared grant flow. | `crates/core/src/action.rs`, `crates/access-fs/src/backend.rs`, `crates/access-network/src/backend.rs`, `crates/access-monty/src/store.rs` |
+| Backend granted-action methods | Keep execution on backend/store objects while requiring `Granted<Action>` at the API boundary. | `crates/access-fs/src/backend.rs`, `crates/access-network/src/backend.rs`, `crates/access-monty/src/store.rs` |
 | `PolicyEngine` | Trait for deciding actions; its default `grant` implementation creates `Granted<Action>`. | `crates/core/src/policy/traits.rs` |
 | `PolicyPipeline` | Concrete kernel policy engine with inbound, typed, outbound, and default-deny evaluation. | `crates/kernel/src/policy/pipeline.rs` |
 | Inbound policies | Apply global gates before resource-specific policy can allow anything. | `crates/kernel/src/policy/pipeline.rs`, `crates/kernel/src/policy/builtins.rs` |
@@ -19,11 +19,10 @@ Use this file when you see a type or pattern and want to know why it exists.
 | `PolicyGrant.reason` | Stores the policy's human-readable explanation. Deny reasons can become user-facing authorization errors. | `crates/contract/src/lib.rs` |
 | `PolicyGrant.predicate` | Stores the exact predicate used for DEBUG policy diagnostics. | `crates/contract/src/lib.rs`, `crates/kernel/src/audit.rs` |
 | `Granted<Action>` | Represents authorization as a value required before execution. | `crates/core/src/policy/grant.rs` |
-| `GrantId` | Correlates final grant records with execution records. | `crates/contract/src/lib.rs`, `crates/kernel/src/audit.rs` |
-| `AuditResource` | Gives grant and execution records a stable resource field. | `crates/contract/src/lib.rs` |
+| `GrantId` | Identifies final allow grant records. | `crates/contract/src/lib.rs`, `crates/kernel/src/audit.rs` |
+| `AuditResource` | Gives grant records a stable resource field. | `crates/contract/src/lib.rs` |
 | `policy.evaluate` audit | Shows each policy's decision at DEBUG level for diagnostics. | `crates/kernel/src/audit.rs`, `crates/kernel/src/policy/pipeline.rs` |
 | `grant.allow` / `grant.deny` audit | Records the final authorization fact at INFO level. | `crates/kernel/src/audit.rs` |
-| `execute.start` / `execute.finish` / `execute.error` audit | Records execution lifecycle after a grant. | `crates/kernel/src/audit.rs`, `crates/kernel/src/runtime/mod.rs` |
 | `CanonicalPath` | Ensures fs actions compare canonical filesystem paths, not raw user strings. | `crates/access-fs/src/action.rs` |
 | `CanonicalRoot` | Keeps workspace containment checks on canonical roots. | `crates/access-fs/src/action.rs`, `crates/kernel/src/policy/context.rs` |
 | `CanonicalPrefix` | Keeps prefix policies in the same canonical path space as actions. | `crates/access-fs/src/action.rs`, `crates/access-fs/src/policy.rs` |

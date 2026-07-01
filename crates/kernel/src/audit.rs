@@ -1,20 +1,20 @@
-//! Structured audit helpers for invocation, authorization, and execution.
+//! Structured audit helpers for invocation and authorization.
 //!
-//! Final grant and execution events are emitted at INFO. Per-policy evaluation
-//! records are emitted at DEBUG so operators can inspect why a policy allowed,
-//! denied, or abstained without making every intermediate decision part of the
-//! default audit stream.
+//! Final grant events are emitted at INFO. Per-policy evaluation records are
+//! emitted at DEBUG so operators can inspect why a policy allowed, denied, or
+//! abstained without making every intermediate decision part of the default
+//! audit stream.
 
 use std::fmt::Debug;
 
 use mvp_contract::{
-    AuditResource, Capabilities, GrantDecision, GrantId, GrantRecord, GrantSource, PolicyDecision,
+    AuditResource, Capabilities, GrantDecision, GrantRecord, GrantSource, PolicyDecision,
     PolicyGrant, PolicyId,
 };
-use mvp_core::{error::ExecutionError, tool::ToolRegistration};
+use mvp_core::tool::ToolRegistration;
 use tracing::{debug, info, warn};
 
-use tracing::{Span, field::Empty};
+use tracing::Span;
 
 pub const AUDIT_TARGET: &str = "mvp::audit";
 
@@ -23,7 +23,6 @@ pub const SPAN_TOOL_INVOKE: &str = "tool.invoke";
 pub const SPAN_TOOL_PARSE_INPUT: &str = "tool.parse_input";
 pub const SPAN_TOOL_EXECUTION: &str = "tool.execution";
 pub const SPAN_ACTION_GRANT: &str = "action.grant";
-pub const SPAN_ACTION_EXECUTE: &str = "action.execute";
 
 // Event names describe individual audit facts that log backends query.
 const EVENT_TOOL_CAPABILITIES_OVERRIDE: &str = "tool.capabilities_override";
@@ -31,15 +30,11 @@ const EVENT_TOOL_NESTED_SCOPE: &str = "tool.nested_scope";
 const EVENT_GRANT_ALLOW: &str = "grant.allow";
 const EVENT_GRANT_DENY: &str = "grant.deny";
 const EVENT_POLICY_EVALUATE: &str = "policy.evaluate";
-const EVENT_EXECUTE_START: &str = "execute.start";
-const EVENT_EXECUTE_FINISH: &str = "execute.finish";
-const EVENT_EXECUTE_ERROR: &str = "execute.error";
 
 // Phases are coarse buckets shared across events and spans.
 pub const PHASE_TOOL: &str = "tool";
 pub const PHASE_POLICY: &str = "policy";
 pub const PHASE_GRANT: &str = "grant";
-pub const PHASE_EXECUTE: &str = "execute";
 
 // Grant sources identify why authorization reached a final allow/deny record.
 const GRANT_SOURCE_POLICY: &str = "policy";
@@ -182,25 +177,6 @@ macro_rules! action_grant_span {
     };
 }
 
-#[macro_export]
-macro_rules! action_execute_span {
-    ($action_kind:expr, $grant_id:expr, $resource:expr) => {{
-        let (resource_kind, resource_value) = $crate::audit::serialize_resource($resource);
-        tracing::info_span!(
-            target: $crate::audit::AUDIT_TARGET,
-            $crate::audit::SPAN_ACTION_EXECUTE,
-            otel.name = %format!("action.execute {}", $action_kind),
-            phase = $crate::audit::PHASE_EXECUTE,
-            action = $action_kind,
-            grant_id = $grant_id.get(),
-            resource_kind = resource_kind,
-            resource = %resource_value,
-            result = tracing::field::Empty,
-            error = tracing::field::Empty,
-        )
-    }};
-}
-
 pub(crate) fn record_grant(record: &GrantRecord) {
     let event = match record.decision() {
         GrantDecision::Allow(_) => EVENT_GRANT_ALLOW,
@@ -282,66 +258,6 @@ pub(crate) fn record_policy_grant(
         decision = decision,
         reason = policy_grant.reason(),
         predicate = policy_grant.predicate(),
-    );
-}
-
-pub(crate) fn execute_start(action_kind: &str, grant_id: GrantId, resource: &AuditResource) {
-    log_action_event(EVENT_EXECUTE_START, action_kind, Some(grant_id), resource);
-}
-
-pub(crate) fn execute_finish(action_kind: &str, grant_id: GrantId, resource: &AuditResource) {
-    log_action_event(EVENT_EXECUTE_FINISH, action_kind, Some(grant_id), resource);
-    let span = Span::current();
-    span.record("result", "ok");
-    span.record("otel.status_code", "ok");
-}
-
-pub(crate) fn execute_error(
-    action_kind: &str,
-    grant_id: GrantId,
-    resource: &AuditResource,
-    error: &ExecutionError,
-) {
-    let (resource_kind, resource_value) = serialize_resource(resource);
-    let error = format!("{error:?}");
-
-    info!(
-        target: AUDIT_TARGET,
-        event = EVENT_EXECUTE_ERROR,
-        phase = PHASE_EXECUTE,
-        action = action_kind,
-        grant_id = grant_id.get(),
-        resource_kind = resource_kind,
-        resource = %resource_value,
-        reason = Empty,
-        error = error,
-    );
-
-    let span = Span::current();
-    span.record("result", "error");
-    span.record("otel.status_code", "error");
-    span.record("otel.status_description", error.as_str());
-    span.record("error", error.as_str());
-}
-
-fn log_action_event(
-    event: &str,
-    action_kind: &str,
-    grant_id: Option<GrantId>,
-    resource: &AuditResource,
-) {
-    let grant_id = grant_id.map(GrantId::get);
-    let (resource_kind, resource_value) = serialize_resource(resource);
-
-    info!(
-        target: AUDIT_TARGET,
-        event = event,
-        phase = PHASE_EXECUTE,
-        action = action_kind,
-        grant_id = grant_id,
-        resource_kind = resource_kind,
-        resource = %resource_value,
-        reason = Empty,
     );
 }
 
